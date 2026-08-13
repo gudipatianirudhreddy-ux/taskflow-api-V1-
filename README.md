@@ -2,6 +2,15 @@
 
 A collaborative task management backend built with **FastAPI** that allows users to authenticate with Google, create groups, invite members, assign tasks, and collaborate securely.
 
+## 🚀 Live Demo
+
+**API Documentation:** https://taskflow-api-v1-225t.onrender.com/docs
+
+> Try the API directly through the interactive Swagger UI.
+
+
+## 💡 Why TaskAPI
+Hackathon teams of 3-4 usually split up tasks early on, but over a 24-48 hour sprint it's easy to lose track of who's doing what, forget context on a task you picked up hours ago, or step on a teammate's work. TaskAPI is a lightweight team task tracker built for exactly this: create a group for your team, assign tasks per person, and keep everyone's progress visible in one place — so the team spends less time re-explaining status and more time building. Built to practice production-grade backend patterns: relational modeling, secure OAuth + JWT auth, and role-based access control
 ## ✨ Features
 
 ### Authentication

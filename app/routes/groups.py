@@ -56,7 +56,7 @@ def updated_group(group_id: int,posts: schemas.UpdateGroup,db: Session = Depends
 
 @router.delete("/{group_id}", status_code=status.HTTP_202_ACCEPTED,response_model=schemas.GroupPost)
 def delete(group_id: int, db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-     deli=db.query(models.Groups).filter(models.Groups.id==group_id, models.Groups.owners_id==current_user["id"])
+     deli=db.query(models.Groups).filter(models.Groups.id==group_id, models.Groups.owners_id==current_user["id"]).first()
      if not deli:
           raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invalid id or id do not exist")
      db.delete(deli)
@@ -97,7 +97,7 @@ def send_invite(invite: schemas.GroupInvitationBase,group_id: int,db: Session = 
     db.add(invite_obj)
     db.commit()
     db.refresh(invite_obj)
-    accept_url = f"invite_link = f"https://taskflow-api-v1-225t.onrender.com/groups/invitations/{token}/accept""
+    accept_url =f"https://taskflow-api-v1-225t.onrender.com/groups/invitations/{token}/accept"
     try:
         inviter=db.query(models.Users).filter(models.Users.id==current_user["id"]).first()
         send_group_invitation(
