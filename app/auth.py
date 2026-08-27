@@ -1,7 +1,6 @@
 from datetime import timedelta, datetime
 from typing import Annotated
-from fastapi import APIRouter, Depends, HTTPException,Request,Response
-from httpx import request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette import status
@@ -10,7 +9,7 @@ from .models import Users
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from jose import jwt, JWTError
-from . import schemas,database,models
+from . import schemas, database, models
 from app.Oauth import oauth
 import os
 import asyncio
@@ -38,11 +37,12 @@ def create_refresh_token(username: str, id: int, expires_delta: timedelta):
     return jwt.encode(encode, SECRET_KEY, ALGORITHM)
     
 
-def get_current_user(requests: Request):
+def get_current_user(request: Request):
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
-    token = token.split(" ")[1]  
+    if token.startswith("Bearer "):
+        token = token.split(" ", 1)[1]  
     try:
         payload=jwt.decode(token, SECRET_KEY,algorithms=[ALGORITHM])
         username: str=payload.get('sub')
