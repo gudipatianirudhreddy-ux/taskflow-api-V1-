@@ -15,7 +15,12 @@ class Role(str, enum.Enum):
     member="member"
     admin="admin"
     owner="owner"
-    
+
+class Priority(str, enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
 
 # Base=declarative_base()
 # metadata=Base.metadata
@@ -24,8 +29,11 @@ class tasks(Base):
     id=Column(BigInteger, primary_key=True, nullable=False)
     title=Column(String, nullable=False)
     content=Column(String, nullable=False)
+    priority= Column(Enum(Priority),nullable=False,default=Priority.MEDIUM,server_default="medium")
+    due_date=Column(DateTime,nullable=True)
     completed=Column(Boolean, nullable=False, server_default="False")
     created_at=Column(DateTime(timezone=True),nullable=False, server_default=text('now()'))
+
     updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
     users_id=Column(BigInteger,ForeignKey("users.id", ondelete='CASCADE'))
     

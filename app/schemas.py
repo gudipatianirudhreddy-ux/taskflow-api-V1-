@@ -2,15 +2,24 @@ from pydantic import BaseModel,EmailStr,constr
 from typing import Optional
 from datetime import datetime
 from app.models import InvitationStatus, Role
+from app.models import Priority
 class Tasks(BaseModel):
     title: str
     content: str
     completed: bool=False
+    priority: Priority=Priority.MEDIUM
+    due_date: datetime |None=None
+    
 
 class TasksCreate(Tasks):
     pass
-class TasksPost(Tasks):
+class TasksPost(BaseModel):
     id: int
+    title: str | None = None
+    content: str | None = None
+    completed: bool | None = None
+    priority: Priority | None = None
+    due_date: datetime | None = None
     class Config:
         from_attributes=True
 
@@ -100,3 +109,11 @@ class GroupTaskResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
+
+class AIChatRequest(BaseModel):
+    message: str
+    
+class MessageResponse(BaseModel):
+    message: str
+    class Config:
+        from_attributes =True
