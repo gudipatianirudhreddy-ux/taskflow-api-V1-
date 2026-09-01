@@ -32,7 +32,7 @@ et_xmlfile==2.0.0
 executing==2.2.1
 fastapi==0.139.2
 fastapi-cli==0.0.32
-fastapi-cloud-cli==0.22.2
+fastapi-cloud-cli==0.22.0
 fastar==0.11.0
 fastjsonschema==2.21.2
 fqdn==1.5.1
@@ -54,7 +54,7 @@ jedi==0.20.0
 Jinja2==3.1.6
 joserfc==1.7.4
 json5==0.14.0
-jsonpointer==1.33
+jsonpointer==3.1.1
 jsonschema==4.26.0
 jsonschema-specifications==2025.9.1
 jupyter==1.1.1
