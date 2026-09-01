@@ -121,5 +121,14 @@ class GroupTask(Base):
         server_default=text("now()"),
         onupdate=func.now()
     )
+
+class AIConversation(Base):
+    __tablename__="ai_conversations"
+    thread_id = Column(String(36), primary_key=True, nullable=False)
+    user_id=Column(BigInteger,ForeignKey("users.id", ondelete='CASCADE'),nullable=False)
+    title=Column(String(200),nullable=False,default="New chat")
+    created_at=Column(DateTime(timezone=True),nullable=False,server_default=text('now()'))
+    updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
+    
     
 

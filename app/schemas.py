@@ -1,4 +1,4 @@
-from pydantic import BaseModel,EmailStr,constr
+from pydantic import BaseModel, ConfigDict,EmailStr,constr
 from typing import Optional
 from datetime import datetime
 from app.models import InvitationStatus, Role
@@ -111,9 +111,17 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
 class AIChatRequest(BaseModel):
+    thread_id: str
     message: str
     
 class MessageResponse(BaseModel):
     message: str
     class Config:
         from_attributes =True
+class AIConversationResponse(BaseModel):
+    thread_id: str
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

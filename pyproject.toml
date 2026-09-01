@@ -95,7 +95,7 @@ dependencies = [
     "uvicorn==0.51.0",
     "watchfiles==1.2.0",
     "websockets==16.1",
-    "xxhash==0.25.0",
+    "xxhash>=3.5.0",
     "zstandard==0.25.0",
 ]
 
