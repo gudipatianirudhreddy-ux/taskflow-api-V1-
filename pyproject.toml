@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "gudipatianirudhreddy-ux", email = "gudipati.anirudh.reddy@gmail.com" }
 ]
-requires-python = ">=3.14"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "alembic==1.18.5",
     "annotated-doc==0.0.4",
@@ -27,7 +27,7 @@ dependencies = [
     "email-validator==2.3.0",
     "fastapi==0.139.2",
     "fastapi-cli==0.0.32",
-    "fastapi-cloud-cli==0.22.2",
+    "fastapi-cloud-cli==0.22.0",
     "fastar==0.11.0",
     "git-filter-repo==2.47.0",
     "greenlet==3.5.3",
@@ -95,7 +95,7 @@ dependencies = [
     "uvicorn==0.51.0",
     "watchfiles==1.2.0",
     "websockets==16.1",
-    "xxhash==4.0.1",
+    "xxhash==0.0.0",
     "zstandard==0.25.0",
 ]
 
