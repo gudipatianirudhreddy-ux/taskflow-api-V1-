@@ -29,7 +29,7 @@ class tasks(Base):
     id=Column(BigInteger, primary_key=True, nullable=False)
     title=Column(String, nullable=False)
     content=Column(String, nullable=False)
-    priority= Column(Enum(Priority),nullable=False,default=Priority.MEDIUM,server_default="medium")
+    priority= Column(Enum(Priority),nullable=False,default=Priority.MEDIUM,server_default="MEDIUM")
     due_date=Column(DateTime,nullable=True)
     completed=Column(Boolean, nullable=False, server_default="False")
     created_at=Column(DateTime(timezone=True),nullable=False, server_default=text('now()'))
@@ -104,12 +104,15 @@ class GroupTask(Base):
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
     )
+    priority= Column(Enum(Priority),nullable=False,default=Priority.MEDIUM,server_default="MEDIUM")
+    due_date=Column(DateTime,nullable=True)
 
     created_by = Column(
         BigInteger,
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False
     )
+
 
     created_at = Column(
         DateTime(timezone=True),

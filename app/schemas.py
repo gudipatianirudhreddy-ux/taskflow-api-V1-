@@ -84,6 +84,9 @@ class MessageResponse(BaseModel):
 class GroupTasksCreate(BaseModel):
     title: str
     description:  Optional[str]=None
+    priority: Priority | None = None
+    due_date: datetime | None = None
+    completed: bool | None = None
     assigned_to: int
     
 
@@ -92,6 +95,8 @@ class GroupTaskUpdate(BaseModel):
     description: Optional[str] = None
     completed: Optional[bool] = None
     assigned_to: Optional[int] = None
+    due_date: Optional[datetime] = None
+    priority: Optional[Priority] = None
 
 class GroupTaskResponse(BaseModel):
     id: int
@@ -101,6 +106,8 @@ class GroupTaskResponse(BaseModel):
     group_id: int
     assigned_to: int
     created_by: int
+    priority: Priority | None = None
+    due_date: datetime| None=None
     created_at: datetime
     updated_at: datetime
 
