@@ -121,6 +121,7 @@ class AIChatRequest(BaseModel):
     thread_id: str
     message: str
     
+    
 class MessageResponse(BaseModel):
     message: str
     class Config:

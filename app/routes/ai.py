@@ -10,7 +10,8 @@ from app.models import InvitationStatus,Role
 from app.services.ai_service import create_agents
 from app.schemas import AIConversationResponse
 from uuid import uuid4
-
+from app.services.group_ai_service import get_graph
+from langchain_core.messages import HumanMessage,SystemMessage,AIMessage
 router=APIRouter(
     prefix='/ai',
     tags=['Ai_Features']
@@ -19,29 +20,31 @@ router=APIRouter(
 @router.post("/chat")
 def get_all_tasks( request: schemas.AIChatRequest,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
     # tasks=db.query(models.tasks).filter(models.tasks.users_id==current_user["id"])
-    agent=create_agents(
-        db=db,
-        user_id=current_user["id"]
-        )
+    # agent=create_agents(
+    #     db=db,
+    #     user_id=current_user["id"]
+    #     )
+    graph=get_graph(db,current_user["id"])
+    result=graph.invoke(
+              {
+            "messages":[
+                HumanMessage(content=request.message)
+            ]
+           },
+        config={
+            "configurable":{
+                "thread_id":request.thread_id
+            }
+        }
+
+    )
+    # user_id=current_user["id"]
     thread_id = request.thread_id
     con=db.query(models.AIConversation).filter(models.AIConversation.thread_id==thread_id,models.AIConversation.user_id==current_user["id"]).first()
     if not con:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Conversation not found")
-    response=agent.invoke(
-        {
-            "messages":[
-                {"role":"user",
-                 "content":request.message
-                }
-            ]
-        },
-        config={
-            "configurable":{
-                "thread_id":thread_id
-            }
-        }
-    )
-    final_response = response["messages"][-1].content
+ 
+    final_response = result["messages"][-1].content
 
     return {"message": final_response}
 

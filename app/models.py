@@ -124,6 +124,10 @@ class GroupTask(Base):
         server_default=text("now()"),
         onupdate=func.now()
     )
+    assignee = relationship(
+        "Users",
+        foreign_keys=[assigned_to]
+    )
 
 class AIConversation(Base):
     __tablename__="ai_conversations"
