@@ -512,10 +512,9 @@ def get_group_tools(db: Session, user_id: int):
             )
             if group:
                 groups.append({
-                    "id": group.id,
                     "name": group.name,
                     "description": group.description,
-                    "owner_id": group.owners_id,
+                    "owner_id": group.owners_id==user_id,
                     "created_at": group.created_at,
                     "role": membership.role
                 })
@@ -537,11 +536,10 @@ def get_group_tools(db: Session, user_id: int):
             return {"error": "Group not found"}
 
         return {
-            "id": gp.id,
             "name": gp.name,
             "description": gp.description,
             "created_at": gp.created_at,
-            "owner_id": gp.owners_id
+            "owner_id": gp.owners_id == user_id
         }
 
     @tool
@@ -555,12 +553,17 @@ def get_group_tools(db: Session, user_id: int):
             return {"error": "You are not a member of this group"}
 
         members = db.query(models.Members).filter(models.Members.group_id == group_id).all()
-        return [{
-            "id": m.id,
-            "user_id": m.user_id,
-            "role": m.role,
-            "joined_at": m.joined_at
-        } for m in members]
+        result=[]
+        for m in members:
+            user = db.query(models.Users).filter(models.Users.id == m.user_id).first()
+            if user:
+                result.append({
+                    "username": user.username,
+                    "role": m.role,
+                    "is_current_user": m.user_id == user_id,
+                    "joined_at": m.joined_at
+                })
+        return result
 
     @tool
     def create_group_tasks(
@@ -615,7 +618,7 @@ def get_group_tools(db: Session, user_id: int):
             "created_by": tasks.created_by,
             "priority": tasks.priority,
             "due_date": tasks.due_date,
-            "assigned_to": tasks.assigned_to
+            "assigned_to":  tasks.assignee.username if tasks.assignee else None
         }
 
     @tool
@@ -634,6 +637,7 @@ def get_group_tools(db: Session, user_id: int):
             "title": task.title,
             "description": task.description,
             "completed": task.completed,
+            "priority": task.priority,
             "due_date": task.due_date,
             "created_by": task.created_by
         } for task in tasks]
