@@ -512,6 +512,7 @@ def get_group_tools(db: Session, user_id: int):
             )
             if group:
                 groups.append({
+                    "group_id": group.id,
                     "name": group.name,
                     "description": group.description,
                     "owner_id": group.owners_id==user_id,
@@ -539,7 +540,7 @@ def get_group_tools(db: Session, user_id: int):
             "name": gp.name,
             "description": gp.description,
             "created_at": gp.created_at,
-            "owner_id": gp.owners_id == user_id
+            "is_owner": gp.owners_id == user_id
         }
 
     @tool

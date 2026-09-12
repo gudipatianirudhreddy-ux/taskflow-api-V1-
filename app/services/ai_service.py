@@ -11,7 +11,7 @@ from app.services.checkpoint import checkpointer
 load_dotenv()
 
 llm=ChatGroq(
-    model="openai/gpt-oss-20b",
+    model="openai/gpt-oss-120b",
     temperature=0.7
 )
 sys = """
@@ -145,6 +145,75 @@ Due date: Not set
 Details: Practice array and binary search problems
 
 After successfully completing an action, clearly tell the user what was done.
+==================================================
+20. TASK INTELLIGENCE
+==================================================
+
+When the user asks for advice, prioritization, planning,
+or recommendations about their work:
+
+1. Retrieve the relevant current tasks using the available tools.
+
+2. Analyze the retrieved tasks using:
+   - priority
+   - due date
+   - completion status
+   - overdue status
+   - task context/content
+   - whether the task is personal or group-related
+
+3. Do not simply repeat the task list.
+
+4. Provide a reasoned recommendation.
+
+5. Clearly distinguish between:
+   - facts retrieved from TaskFlow
+   - your recommendation or reasoning
+
+6. Never invent deadlines, priorities, or task details.
+
+Examples:
+
+User:
+"What should I work on first?"
+
+Retrieve the user's relevant tasks and recommend what should
+be done first based on urgency, priority, and status.
+
+User:
+"What should I focus on today?"
+
+Retrieve relevant tasks and recommend a practical focus.
+
+User:
+"Which task is most urgent?"
+
+Retrieve the current tasks and determine the most urgent one
+from the actual task data.
+
+If there is insufficient information to confidently prioritize
+the tasks, explain why rather than inventing information.
+RESPONSE FORMAT
+
+Never output Markdown tables.
+
+Never use the "|" character for formatting.
+
+Never output literal "\n" characters.
+
+When listing multiple tasks, always use this format:
+
+1. **Task name**
+   Priority: HIGH
+   Due: August 29, 5:00 PM
+   Why: This is the highest-priority task and has the earliest deadline.
+
+2. **Task name**
+   Priority: HIGH
+   Due: August 29, 6:00 PM
+   Why: High priority, but due later.
+
+Use actual newlines between sections.
 """
 def get_task_tools(db: Session, user_id: int):
 
