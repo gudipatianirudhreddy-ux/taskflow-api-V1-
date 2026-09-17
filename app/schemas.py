@@ -133,3 +133,27 @@ class AIConversationResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class SubtaskCreate(BaseModel):
+    title: str
+    content: str | None = None
+    completed: bool = False
+    due_date: datetime | None = None
+
+class SubtaskUpdate(BaseModel):
+    title: str | None = None
+    content: str | None = None
+    completed: bool | None = None
+    due_date: datetime | None = None
+
+
+class SubtaskResponse(BaseModel):
+    id: int
+    title: str
+    content: str | None
+    completed: bool
+    due_date: datetime | None
+    task_id: int
+
+    class Config:
+        from_attributes = True
