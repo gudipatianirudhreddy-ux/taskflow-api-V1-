@@ -157,3 +157,29 @@ class SubtaskResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class GroupSubtaskCreate(BaseModel):
+    title: str
+    description: str | None = None
+    group_task_id: int
+    completed: bool = False
+    due_date: datetime | None = None
+
+
+class GroupSubtaskResponse(BaseModel):
+    id: int
+    title: str
+    description: str | None
+    completed: bool
+    group_task_id: int
+    due_date: datetime | None
+    
+
+    class Config:
+        from_attributes = True
+
+class GroupSubtaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    completed: Optional[bool] = None
+    due_date: datetime| None=None

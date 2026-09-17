@@ -65,3 +65,4 @@ def get_thread_id(db: Session=Depends(database.get_db),current_user=Depends(get_
 def get_all_conversations(db: Session=Depends(database.get_db),current_user=Depends(get_current_user)):
     qur=db.query(models.AIConversation).filter(models.AIConversation.user_id==current_user["id"]).order_by(models.AIConversation.updated_at.desc()).all()
     return qur
+
