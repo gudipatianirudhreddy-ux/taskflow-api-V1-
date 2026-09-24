@@ -36,6 +36,17 @@ class tasks(Base):
 
     updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
     users_id=Column(BigInteger,ForeignKey("users.id", ondelete='CASCADE'))
+
+class subtasks(Base):
+    __tablename__="Subtasks"
+    id=Column(BigInteger, primary_key=True, nullable=False)
+    title=Column(String, nullable=False)
+    content=Column(String, nullable=True)
+    completed=Column(Boolean, nullable=False, server_default="False")
+    due_date = Column(DateTime, nullable=True)
+    created_at=Column(DateTime(timezone=True),nullable=False, server_default=text('now()'))
+    updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
+    task_id=Column(BigInteger,ForeignKey("Tasks.id", ondelete='CASCADE'))
     
 class Users(Base):
     __tablename__="users"
@@ -129,6 +140,21 @@ class GroupTask(Base):
         foreign_keys=[assigned_to]
     )
 
+class GroupSubtask(Base):
+    __tablename__ = "group_subtasks"
+
+    id = Column(BigInteger, primary_key=True)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    completed = Column(Boolean, nullable=False, server_default="False")
+    due_date = Column(DateTime, nullable=True)
+    group_task_id = Column(
+        BigInteger,
+        ForeignKey("group_tasks.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    created_at=Column(DateTime(timezone=True),nullable=False,server_default=text('now()'))
+    updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
 class AIConversation(Base):
     __tablename__="ai_conversations"
     thread_id = Column(String(36), primary_key=True, nullable=False)

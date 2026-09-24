@@ -16,7 +16,7 @@ The project also practices production-oriented backend patterns such as relation
 
 ## ✨ Features
 
-### Authentication & Security
+### Authentication & Security 
 - Google OAuth 2.0 login
 - JWT-based authentication
 - Protected API endpoints
