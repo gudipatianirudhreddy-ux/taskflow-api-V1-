@@ -1,5 +1,6 @@
-from sqlalchemy import Column,BigInteger,String,Boolean,DateTime, text,ForeignKey,UniqueConstraint, Enum
+from sqlalchemy import Column,BigInteger,String,Boolean,DateTime, text,ForeignKey,UniqueConstraint, Enum,Integer
 from sqlalchemy.orm import relationship
+# pyrefly: ignore [missing-import]
 from . database import Base
 from sqlalchemy.sql import func
 # from sqlalchemy.ext.declarative import declarative_base
@@ -36,6 +37,7 @@ class tasks(Base):
 
     updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
     users_id=Column(BigInteger,ForeignKey("users.id", ondelete='CASCADE'))
+    estimated_duration = Column(Integer, nullable=True)
 
 class subtasks(Base):
     __tablename__="Subtasks"
@@ -139,6 +141,7 @@ class GroupTask(Base):
         "Users",
         foreign_keys=[assigned_to]
     )
+    estimated_duration = Column(Integer, nullable=True)
 
 class GroupSubtask(Base):
     __tablename__ = "group_subtasks"
