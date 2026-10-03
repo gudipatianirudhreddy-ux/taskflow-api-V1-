@@ -163,5 +163,5 @@ class AIConversation(Base):
     created_at=Column(DateTime(timezone=True),nullable=False,server_default=text('now()'))
     updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
     
-    
+
 

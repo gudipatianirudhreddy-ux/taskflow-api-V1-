@@ -492,6 +492,30 @@ UNDERSTAND → RETRIEVE → REASON → RESPOND
 over:
 
 ASK USER FOR INTERNAL INFORMATION → RESPOND
+
+
+
+TASK PLANNING
+
+1. When the user asks what to work on first, what to focus on,
+   or how to prioritize personal tasks, use the plan_my_tasks tool.
+
+2. The plan_my_tasks tool returns recommendations based on the
+   user's actual incomplete personal tasks, priority, and due dates.
+
+3. Explain the returned ranking and why each task was prioritized.
+   Use the planner's returned reasons rather than inventing
+   deadlines, priorities, or task details.
+
+4. If no pending tasks are returned, tell the user that they have
+   no incomplete personal tasks to prioritize.
+
+5. The planner is read-only. It recommends task order; it does not
+   create a schedule or modify tasks.
+
+6. Never claim that tasks were scheduled or updated unless a
+   separate tool successfully performed that action.
+
 """
 def get_group_tools(db: Session, user_id: int):
     @tool

@@ -53,7 +53,7 @@ def create_subtask(task_id: int, subtask:schemas.SubtaskCreate, db: Session=Depe
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found or you do not have permission to add subtasks.")
     
-    new_subtask = models.subtasks(**subtask.dict(), tasks_id=task_id)
+    new_subtask = models.subtasks(**subtask.dict(), task_id=task_id)
     db.add(new_subtask)
     db.commit()
     db.refresh(new_subtask)
@@ -61,24 +61,54 @@ def create_subtask(task_id: int, subtask:schemas.SubtaskCreate, db: Session=Depe
 
 @router.get("/{task_id}/subtasks",status_code=status.HTTP_200_OK,response_model=List[schemas.SubtaskResponse])
 def get_subtasks(task_id: int, db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    sub=db.query(models.subtasks).filter(models.subtasks.tasks_id==task_id, models.tasks.users_id==current_user["id"]).all()
+    sub = (
+    db.query(models.subtasks)
+    .join(models.tasks, models.subtasks.task_id == models.tasks.id)
+    .filter(
+        models.subtasks.task_id == task_id,
+        models.tasks.users_id == current_user["id"]
+    )
+    .all()
+)
     if not sub:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtasks not found or you do not have permission to view subtasks.")
     return sub
 
 @router.put("/subtasks/{subtask_id}",status_code=status.HTTP_200_OK,response_model=schemas.SubtaskResponse)
 def update_subtask(subtask_id: int,subtask:schemas.SubtaskCreate,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    sub=db.query(models.subtasks).filter(models.subtasks.id==subtask_id, models.tasks.users_id==current_user["id"])
-    if not sub.first():
+    sub = (
+    db.query(models.subtasks)
+    .join(
+        models.tasks,
+        models.subtasks.task_id == models.tasks.id
+    )
+    .filter(
+        models.subtasks.id == subtask_id,
+        models.tasks.users_id == current_user["id"]
+    )
+)
+    subtask_obj = sub.first()
+    if not subtask_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found or you do not have permission to update subtask.")
-    sub.update(subtask.dict(), synchronize_session=False)
+    for key, value in subtask.dict(exclude_unset=True).items():
+        setattr(subtask_obj, key, value)
     db.commit()
-    db.refresh(sub.first())
-    return sub.first()
+    db.refresh(subtask_obj)
+    return subtask_obj
 
 @router.delete("/subtasks/{subtask_id}",status_code=status.HTTP_200_OK)
 def delete_subtask(subtask_id: int,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    sub=db.query(models.subtasks).filter(models.subtasks.id==subtask_id, models.tasks.users_id==current_user["id"])
+    sub = (
+    db.query(models.subtasks)
+    .join(
+        models.tasks,
+        models.subtasks.task_id == models.tasks.id
+    )
+    .filter(
+        models.subtasks.id == subtask_id,
+        models.tasks.users_id == current_user["id"]
+    )
+)
     if not sub.first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found or you do not have permission to delete subtask.")
     db.delete(sub.first())

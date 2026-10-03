@@ -161,7 +161,7 @@ class SubtaskResponse(BaseModel):
 class GroupSubtaskCreate(BaseModel):
     title: str
     description: str | None = None
-    group_task_id: int
+    group_task_id: Optional[int] = None
     completed: bool = False
     due_date: datetime | None = None
 

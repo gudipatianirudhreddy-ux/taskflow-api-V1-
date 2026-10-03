@@ -8,6 +8,7 @@ from langchain.tools import tool
 from datetime import datetime
 from app.models import Priority
 from app.services.checkpoint import checkpointer
+from app.services.task_planner import build_task_plan
 load_dotenv()
 
 llm=ChatGroq(
@@ -317,14 +318,33 @@ def get_task_tools(db: Session, user_id: int):
         """Get the current date and time. Use this when the user mentions relative dates or times such as today, tomorrow, tonight, next week, or Monday."""
         now=datetime.now()
         return {"current_datetime":now.isoformat()}
-    
+    @tool
+    def plan_my_tasks():
+        """Analyze the current user's incomplete personal tasks and
+        return a prioritized list based on priority and due dates.
+        Use this when the user asks what to work on first, what to
+        focus on, or how to prioritize personal tasks"""
+        tasks = (
+            db.query(models.tasks)
+            .filter(models.tasks.users_id == user_id)
+            .all()
+        )
 
+        task_data = [
+            {
+                "id": task.id,
+                "title": task.title,
+                "content": task.content,
+                "priority": task.priority,
+                "due_date": task.due_date,
+                "completed": task.completed,
+            }
+            for task in tasks
+        ]
 
+        return build_task_plan(task_data)
 
-        
-
-        
-    return [create_task, get_tasks,get_task,delete_task,update_tasks,get_datetime]
+    return [create_task, get_tasks,get_task,delete_task,update_tasks,get_datetime,plan_my_tasks]
     
 
 def create_agents(db:Session,user_id:int):

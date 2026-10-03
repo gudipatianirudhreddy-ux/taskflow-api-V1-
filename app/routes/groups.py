@@ -123,7 +123,10 @@ def accept_invitation(token: str,db: Session = Depends(database.get_db),current_
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     if qr1.status != InvitationStatus.pending:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation is no longer pending.")
-    if qr1.expires_at < datetime.now(timezone.utc):
+    expires_at = qr1.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < datetime.now(timezone.utc):
         qr1.status=InvitationStatus.expired
         db.commit()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation has expired")
@@ -398,3 +401,156 @@ def get_my_tasks(group_id: int, db: Session = Depends(database.get_db),current_u
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,detail="You are not a member of this group")
     tasks = db.query(models.GroupTask).filter(models.GroupTask.group_id == group_id,models.GroupTask.assigned_to == current_user["id"]).all()
     return tasks
+
+
+@router.post("/{group_id}/tasks/{task_id}/subtasks", status_code=status.HTTP_201_CREATED, response_model=schemas.GroupSubtaskResponse)
+def create_group_subtask(
+    group_id: int,
+    task_id: int,
+    subtask: schemas.GroupSubtaskCreate,
+    db: Session = Depends(database.get_db),
+    current_user=Depends(get_current_user)
+):
+    group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+    member = db.query(models.Members).filter(
+        models.Members.group_id == group_id,
+        models.Members.user_id == current_user["id"]
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this group")
+
+    task = db.query(models.GroupTask).filter(
+        models.GroupTask.id == task_id,
+        models.GroupTask.group_id == group_id
+    ).first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this group")
+
+    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to add subtasks to this task")
+
+    subtask_data = subtask.model_dump(exclude_unset=True)
+    subtask_data["group_task_id"] = task_id
+    new_subtask = models.GroupSubtask(**subtask_data)
+    db.add(new_subtask)
+    db.commit()
+    db.refresh(new_subtask)
+    return new_subtask
+
+
+@router.get("/{group_id}/tasks/{task_id}/subtasks", status_code=status.HTTP_200_OK, response_model=List[schemas.GroupSubtaskResponse])
+def get_group_subtasks(
+    group_id: int,
+    task_id: int,
+    db: Session = Depends(database.get_db),
+    current_user=Depends(get_current_user)
+):
+    group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+    member = db.query(models.Members).filter(
+        models.Members.group_id == group_id,
+        models.Members.user_id == current_user["id"]
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this group")
+
+    task = db.query(models.GroupTask).filter(
+        models.GroupTask.id == task_id,
+        models.GroupTask.group_id == group_id
+    ).first()
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this group")
+
+    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to view subtasks for this task")
+
+    subtasks = db.query(models.GroupSubtask).filter(models.GroupSubtask.group_task_id == task_id).all()
+    return subtasks
+
+
+@router.patch("/{group_id}/tasks/subtasks/{subtask_id}", status_code=status.HTTP_200_OK, response_model=schemas.GroupSubtaskResponse)
+def update_group_subtask(
+    group_id: int,
+    subtask_id: int,
+    subtask_update: schemas.GroupSubtaskUpdate,
+    db: Session = Depends(database.get_db),
+    current_user=Depends(get_current_user)
+):
+    group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+    member = db.query(models.Members).filter(
+        models.Members.group_id == group_id,
+        models.Members.user_id == current_user["id"]
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this group")
+
+    subtask = (
+        db.query(models.GroupSubtask)
+        .join(models.GroupTask, models.GroupSubtask.group_task_id == models.GroupTask.id)
+        .filter(
+            models.GroupSubtask.id == subtask_id,
+            models.GroupTask.group_id == group_id
+        )
+        .first()
+    )
+    if not subtask:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found in this group")
+
+    task = db.query(models.GroupTask).filter(models.GroupTask.id == subtask.group_task_id).first()
+    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this subtask")
+
+    update_data = subtask_update.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(subtask, key, value)
+
+    db.commit()
+    db.refresh(subtask)
+    return subtask
+
+
+@router.delete("/{group_id}/tasks/subtasks/{subtask_id}", status_code=status.HTTP_200_OK, response_model=schemas.MessageResponse)
+def delete_group_subtask(
+    group_id: int,
+    subtask_id: int,
+    db: Session = Depends(database.get_db),
+    current_user=Depends(get_current_user)
+):
+    group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group not found")
+
+    member = db.query(models.Members).filter(
+        models.Members.group_id == group_id,
+        models.Members.user_id == current_user["id"]
+    ).first()
+    if not member:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this group")
+
+    subtask = (
+        db.query(models.GroupSubtask)
+        .join(models.GroupTask, models.GroupSubtask.group_task_id == models.GroupTask.id)
+        .filter(
+            models.GroupSubtask.id == subtask_id,
+            models.GroupTask.group_id == group_id
+        )
+        .first()
+    )
+    if not subtask:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found in this group")
+
+    task = db.query(models.GroupTask).filter(models.GroupTask.id == subtask.group_task_id).first()
+    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to delete this subtask")
+
+    db.delete(subtask)
+    db.commit()
+    return {"message": "Subtask deleted successfully"}
