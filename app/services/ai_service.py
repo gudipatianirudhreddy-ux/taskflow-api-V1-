@@ -9,6 +9,7 @@ from datetime import datetime
 from app.models import Priority
 from app.services.checkpoint import checkpointer
 from app.services.task_planner import build_task_plan
+from langgraph.types import interrupt
 load_dotenv()
 
 llm=ChatGroq(
@@ -222,7 +223,7 @@ def get_task_tools(db: Session, user_id: int):
     def create_task(title: str, content: str,
                      priority: Priority = Priority.MEDIUM,
     due_date: datetime | None = None
-    ,completed: bool = False):
+    ,completed: bool = False,estimated_duration: int | None = None):
         """Create a new task for the current user."""
 
         task = models.tasks(
@@ -231,7 +232,8 @@ def get_task_tools(db: Session, user_id: int):
             priority= priority,
             due_date= due_date,
             completed=completed,
-            users_id=user_id
+            users_id=user_id,
+            estimated_duration=estimated_duration
         )
 
         db.add(task)
@@ -244,7 +246,8 @@ def get_task_tools(db: Session, user_id: int):
             "content": task.content,
             "priority":task.priority,
             "due_date":task.due_date,
-            "completed": task.completed
+            "completed": task.completed,
+            "estimated_duration":task.estimated_duration
         }
 
     @tool
@@ -257,7 +260,8 @@ def get_task_tools(db: Session, user_id: int):
             "content": task.content,
             "priority":task.priority,
             "due_date":task.due_date,
-            "completed": task.completed
+            "completed": task.completed,
+            "estimated_duration":task.estimated_duration
         }
             for task in tasks
         
@@ -274,7 +278,8 @@ def get_task_tools(db: Session, user_id: int):
             "content": task.content,
             "priority":task.priority,
              "due_date":task.due_date,
-            "completed": task.completed
+            "completed": task.completed,
+            "estimated_duration":task.estimated_duration
         }
     @tool
     def delete_task(id: int):
@@ -282,12 +287,45 @@ def get_task_tools(db: Session, user_id: int):
         qr=db.query(models.tasks).filter(models.tasks.users_id==user_id,models.tasks.id==id).first()
         if not qr:
             return {"error":"Task not found"}
-        db.delete(qr)
-        db.commit()
-        return {"message":"Returned succesfully"}
+        decision = interrupt({
+        "action": "delete_task",
+        "task_id": qr.id,
+        "task_title": qr.title,
+        "message": f"Do you want to delete '{qr.title}'?"
+      })
+        print("HITL decision received:", repr(decision))
+        if decision == "reject":
+                     print("Deletion rejected. Task remains:", qr.id, qr.title)
+                     return {
+                            "status": "rejected",
+                            "message": f"Deletion cancelled. '{qr.title}' was not deleted."
+                            }
+        if decision!="accept":
+            return {"status": "rejected","message":f"Task {qr.title} not deleted"}
+        print("Approval accepted. Checking task again...")
+        task= (
+                db.query(models.tasks)
+                .filter(
+                         models.tasks.users_id == user_id,
+                         models.tasks.id == id
+                       )
+                .first()
+        )
+        if not task:
+            return {"error":"task not found"}
+        print("Task found:", task.id, task.title)
+        try:
+               db.delete(task)
+               db.commit()
+               print("Database commit successful")
+        except Exception as e:
+            db.rollback()
+            print("Database deletion failed:", repr(e))
+            return {"error": "Database deletion failed"}
+        return {"status":"deleted","message":f"Task {task.title} deleted successfully"}
     @tool(args_schema=schemas.TasksPost)
     def update_tasks(id: int,title: str | None=None,content: str | None=None, completed:bool | None=None,priority: Priority | None = None,
-    due_date: datetime | None = None):
+    due_date: datetime | None = None,estimated_duration: int | None = None):
         """Update a task using its ID for the current authenticated user."""
         qr1=db.query(models.tasks).filter(models.tasks.users_id==user_id,models.tasks.id==id).first()
         if not qr1:
@@ -301,7 +339,9 @@ def get_task_tools(db: Session, user_id: int):
         if priority is not None:
             qr1.priority =priority
         if due_date is not None:
-            qr1.due_date=due_date       
+            qr1.due_date=due_date 
+        if estimated_duration is not None:
+            qr1.estimated_duration=estimated_duration      
         
         db.commit()
         db.refresh(qr1)
@@ -311,7 +351,8 @@ def get_task_tools(db: Session, user_id: int):
         "content": qr1.content,
         "priority":qr1.priority,
         "due_date":qr1.due_date,
-        "completed": qr1.completed
+        "completed": qr1.completed,
+        "estimated_duration":qr1.estimated_duration
     }
     @tool
     def get_datetime():
@@ -338,6 +379,7 @@ def get_task_tools(db: Session, user_id: int):
                 "priority": task.priority,
                 "due_date": task.due_date,
                 "completed": task.completed,
+                "estimated_duration":task.estimated_duration
             }
             for task in tasks
         ]

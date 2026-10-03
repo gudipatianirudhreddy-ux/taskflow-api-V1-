@@ -1,5 +1,5 @@
 from pydantic import BaseModel, ConfigDict,EmailStr,constr
-from typing import Optional
+from typing import Optional,Literal 
 from datetime import datetime
 from app.models import InvitationStatus, Role
 from app.models import Priority
@@ -9,6 +9,7 @@ class Tasks(BaseModel):
     completed: bool=False
     priority: Priority=Priority.MEDIUM
     due_date: datetime |None=None
+    estimated_duration: int | None = None
     
 
 class TasksCreate(Tasks):
@@ -20,6 +21,7 @@ class TasksPost(BaseModel):
     completed: bool | None = None
     priority: Priority | None = None
     due_date: datetime | None = None
+    estimated_duration: int | None = None
     class Config:
         from_attributes=True
 
@@ -119,7 +121,8 @@ class RefreshTokenRequest(BaseModel):
 
 class AIChatRequest(BaseModel):
     thread_id: str
-    message: str
+    message: str |None=None
+    decision: Literal["accept","reject"] | None = None
     
     
 class MessageResponse(BaseModel):

@@ -33,13 +33,23 @@ def _normalize_due_date(due_date: Any) -> datetime | None:
     if not isinstance(due_date, datetime):
         return None
 
-    # Normalize timezone-aware values for safe comparison.
     if due_date.tzinfo is not None:
         due_date = due_date.astimezone(timezone.utc).replace(
             tzinfo=None
         )
 
     return due_date
+
+
+def _normalize_estimated_duration(duration: Any) -> int | None:
+    """Accept only positive integer estimates, expressed in minutes."""
+    if isinstance(duration, bool) or not isinstance(duration, int):
+        return None
+
+    if duration <= 0:
+        return None
+
+    return duration
 
 
 def build_task_plan(
@@ -49,7 +59,8 @@ def build_task_plan(
     """
     Rank incomplete tasks by priority and due date.
 
-    This function is read-only. It does not modify the database.
+    Include duration estimates and workload totals.
+    This function is deterministic and read-only.
     """
     if now is None:
         now = datetime.now(timezone.utc)
@@ -67,6 +78,9 @@ def build_task_plan(
         priority = _normalize_priority(
             task.get("priority", "MEDIUM")
         )
+        estimated_duration = _normalize_estimated_duration(
+            task.get("estimated_duration")
+        )
 
         overdue = due_date is not None and due_date < now
 
@@ -74,10 +88,12 @@ def build_task_plan(
             **task,
             "priority": priority,
             "due_date": due_date,
+            "estimated_duration": estimated_duration,
             "overdue": overdue,
         })
 
-    # Priority first, then earliest deadline.
+    # Preserve existing policy:
+    # priority first, then earliest deadline.
     # Tasks without deadlines come last within their priority.
     pending_tasks.sort(
         key=lambda task: (
@@ -94,11 +110,10 @@ def build_task_plan(
         priority = task["priority"]
         due_date = task["due_date"]
         overdue = task["overdue"]
+        estimated_duration = task["estimated_duration"]
 
         if overdue:
-            reason = (
-                "This task is overdue and should be reviewed promptly."
-            )
+            reason = "This task is overdue and should be reviewed promptly."
         elif due_date is not None:
             reason = (
                 f"It has {priority} priority and a deadline of "
@@ -120,10 +135,24 @@ def build_task_plan(
                 else None
             ),
             "overdue": overdue,
+            "estimated_duration": estimated_duration,
             "reason": reason,
         })
 
+    total_estimated_minutes = sum(
+        task["estimated_duration"] or 0
+        for task in pending_tasks
+    )
+
+    tasks_without_estimates = sum(
+        task["estimated_duration"] is None
+        for task in pending_tasks
+    )
+
     return {
         "total_pending": len(recommendations),
+        "total_estimated_minutes": total_estimated_minutes,
+        "tasks_without_estimates": tasks_without_estimates,
         "recommendations": recommendations,
     }
+
