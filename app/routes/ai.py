@@ -24,6 +24,10 @@ def get_all_tasks( request: schemas.AIChatRequest,db: Session = Depends(database
     #     db=db,
     #     user_id=current_user["id"]
     #     )
+    thread_id = request.thread_id
+    con=db.query(models.AIConversation).filter(models.AIConversation.thread_id==thread_id,models.AIConversation.user_id==current_user["id"]).first()
+    if not con:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Conversation not found")
     graph=get_graph(db,current_user["id"])
     result=graph.invoke(
               {
@@ -39,11 +43,6 @@ def get_all_tasks( request: schemas.AIChatRequest,db: Session = Depends(database
 
     )
     # user_id=current_user["id"]
-    thread_id = request.thread_id
-    con=db.query(models.AIConversation).filter(models.AIConversation.thread_id==thread_id,models.AIConversation.user_id==current_user["id"]).first()
-    if not con:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Conversation not found")
- 
     final_response = result["messages"][-1].content
 
     return {"message": final_response}
