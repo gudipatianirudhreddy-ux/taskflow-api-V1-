@@ -337,6 +337,15 @@ def get_task_tools(db: Session, user_id: int):
         qr1=db.query(models.tasks).filter(models.tasks.users_id==user_id,models.tasks.id==id).first()
         if not qr1:
             return {"error":"Task not found"}
+        if clear_due_date and due_date is not None:
+            return {"error": "Provide either a new due_date or clear_due_date, not both."}
+        normalized_due_date = None
+        if due_date is not None:
+            try:
+                normalized_due_date = normalize_due_date_input(due_date)
+            except ValueError as exc:
+                return {"error": str(exc)}
+
         if title is not None:
              qr1.title = title
         if content is not None:
@@ -345,15 +354,10 @@ def get_task_tools(db: Session, user_id: int):
             qr1.completed = completed
         if priority is not None:
             qr1.priority =priority
-        if clear_due_date and due_date is not None:
-            return {"error": "Provide either a new due_date or clear_due_date, not both."}
         if clear_due_date:
             qr1.due_date = None
         elif due_date is not None:
-            try:
-                qr1.due_date = normalize_due_date_input(due_date)
-            except ValueError as exc:
-                return {"error": str(exc)}
+            qr1.due_date = normalized_due_date
         if estimated_duration is not None:
             qr1.estimated_duration=estimated_duration      
         
