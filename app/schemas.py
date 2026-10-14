@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, constr, field_validator, field_serializer
+from pydantic import BaseModel, ConfigDict, EmailStr, constr, Field, field_validator, field_serializer
 from typing import Optional,Literal 
 from datetime import datetime
 from app.models import InvitationStatus, Role
@@ -51,7 +51,7 @@ class AgentTaskCreateArgs(BaseModel):
     content: str
     completed: bool = False
     priority: Priority = Priority.MEDIUM
-    due_date: str | None = None
+    due_date: str | None = Field(default=None, description="ISO date YYYY-MM-DD or ISO datetime; never pass natural-language phrases.")
     estimated_duration: int | None = None
 
 
@@ -66,9 +66,9 @@ class AgentTaskUpdateArgs(BaseModel):
     content: str | None = None
     completed: bool | None = None
     priority: Priority | None = None
-    due_date: str | None = None
+    due_date: str | None = Field(default=None, description="ISO date YYYY-MM-DD or ISO datetime; never pass natural-language phrases.")
     estimated_duration: int | None = None
-    clear_due_date: bool = False
+    clear_due_date: bool = Field(default=False, description="Set true only when the user explicitly asks to remove the current deadline.")
 
 
 class UserCreate(BaseModel):
