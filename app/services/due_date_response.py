@@ -26,6 +26,14 @@ def _title_mentioned(title: str, text: str) -> bool:
 
 def _decode_tool_content(content: Any) -> Any:
     """Decode common LangChain tool-result representations without executing code."""
+    if isinstance(content, (list, tuple)):
+        # Some providers wrap tool output in content blocks.
+        for block in content:
+            if isinstance(block, dict) and isinstance(block.get("text"), str):
+                decoded = _decode_tool_content(block["text"])
+                if decoded is not None:
+                    return decoded
+        return content
     if not isinstance(content, str):
         return content
     try:
