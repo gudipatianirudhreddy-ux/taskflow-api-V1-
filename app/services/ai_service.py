@@ -6,7 +6,12 @@ from app import models, schemas
 from sqlalchemy.orm import Session
 from langchain.tools import tool
 from datetime import datetime
-from app.date_utils import normalize_due_date_input, current_local_datetime, format_stored_due_date
+from app.date_utils import (
+    normalize_due_date_input,
+    current_local_datetime,
+    format_stored_due_date,
+    format_stored_due_date_local,
+)
 from app.models import Priority
 from app.services.checkpoint import checkpointer
 from app.services.task_planner import build_task_plan
@@ -117,6 +122,20 @@ TASK RETRIEVAL
 
 23. If a task has no due date, indicate:
     Due date: Not set
+
+24. When the user asks when a particular task is due, retrieve the task using
+    get_task or get_tasks and answer from the returned task record. Do not
+    substitute a different task or paraphrase/change its title.
+25. Task tools provide both due_date (UTC ISO timestamp ending in Z) and
+    due_date_local (a ready-to-display value converted using APP_TIMEZONE).
+    For user-facing answers, prefer due_date_local instead of mentally converting
+    the UTC value. If due_date is null, say the deadline is not set.
+26. For a date-only request, answer with the local calendar date. Include the
+    local time when the user asked for a time or when the stored task has a
+    specific time that matters. Do not mention the raw UTC timestamp unless
+    the user asks for technical details.
+27. Keep date answers complete and concise. Never leave parentheses or sentences
+    unfinished. Do not say "most time zones"; explicitly name the timezone used.
 
 TASK DISPLAY FORMAT
 
@@ -252,7 +271,8 @@ def get_task_tools(db: Session, user_id: int):
             "title": task.title,
             "content": task.content,
             "priority":task.priority,
-            "due_date":format_stored_due_date(task.due_date),
+            "due_date": format_stored_due_date(task.due_date),
+            "due_date_local": format_stored_due_date_local(task.due_date),
             "completed": task.completed,
             "estimated_duration":task.estimated_duration
         }
@@ -266,7 +286,8 @@ def get_task_tools(db: Session, user_id: int):
             "title": task.title,
             "content": task.content,
             "priority":task.priority,
-            "due_date":task.due_date,
+            "due_date": format_stored_due_date(task.due_date),
+            "due_date_local": format_stored_due_date_local(task.due_date),
             "completed": task.completed,
             "estimated_duration":task.estimated_duration
         }
@@ -284,7 +305,8 @@ def get_task_tools(db: Session, user_id: int):
             "title": task.title,
             "content": task.content,
             "priority":task.priority,
-             "due_date":task.due_date,
+             "due_date": format_stored_due_date(task.due_date),
+            "due_date_local": format_stored_due_date_local(task.due_date),
             "completed": task.completed,
             "estimated_duration":task.estimated_duration
         }
@@ -370,6 +392,7 @@ def get_task_tools(db: Session, user_id: int):
         "content": qr1.content,
         "priority":qr1.priority,
         "due_date": format_stored_due_date(qr1.due_date),
+        "due_date_local": format_stored_due_date_local(qr1.due_date),
         "completed": qr1.completed,
         "estimated_duration":qr1.estimated_duration
     }

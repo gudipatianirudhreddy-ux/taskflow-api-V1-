@@ -137,7 +137,11 @@ def test_group_agent_tools_authorization(db, user1, user2, user3):
 
 def test_personal_agent_accepts_date_only_and_stores_utc(db, user1):
     """AI task creation accepts YYYY-MM-DD and persists the normalized UTC value."""
-    from app.date_utils import normalize_due_date_input, format_stored_due_date
+    from app.date_utils import (
+        normalize_due_date_input,
+        format_stored_due_date,
+        format_stored_due_date_local,
+    )
 
     tools = {t.name: t for t in get_task_tools(db, user1.id)}
     result = tools["create_task"].invoke({
@@ -244,3 +248,34 @@ def test_group_agent_accepts_and_clears_date_only_deadlines(db, user1):
     assert "error" not in cleared
     db.refresh(task)
     assert task.due_date is None
+
+
+def test_personal_task_retrieval_returns_utc_iso_due_dates(db, user1):
+    """Task retrieval tools return UTC timestamps plus local display values."""
+    from app.date_utils import (
+        normalize_due_date_input,
+        format_stored_due_date,
+        format_stored_due_date_local,
+    )
+
+    tools = {t.name: t for t in get_task_tools(db, user1.id)}
+    created = tools["create_task"].invoke({
+        "title": "Prepare my resume for internships",
+        "content": "Check retrieval formatting",
+        "due_date": "2026-10-20",
+    })
+    stored_due_date = normalize_due_date_input("2026-10-20")
+    expected = format_stored_due_date(stored_due_date)
+    expected_local = format_stored_due_date_local(stored_due_date)
+
+    single = tools["get_task"].invoke({"id": created["id"]})
+    listing = tools["get_tasks"].invoke({})
+
+    assert single["title"] == "Prepare my resume for internships"
+    assert single["due_date"] == expected
+    assert single["due_date_local"] == expected_local
+    listed = next(task for task in listing if task["id"] == created["id"])
+    assert listed["due_date"] == expected
+    assert listed["due_date_local"] == expected_local
+    assert expected.endswith("Z")
+    assert expected_local == "October 20, 2026 at 12:00 AM IST (Asia/Kolkata)"
