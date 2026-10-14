@@ -11,6 +11,7 @@ from app.services.ai_service import create_agents
 from app.schemas import AIConversationResponse
 from uuid import uuid4
 from app.services.group_ai_service import get_graph
+from app.services.due_date_response import answer_due_date_question
 from langchain_core.messages import HumanMessage,SystemMessage,AIMessage
 from langgraph.types import Command
 router=APIRouter(
@@ -86,7 +87,18 @@ def get_all_tasks( request: schemas.AIChatRequest,db: Session = Depends(database
             "approval": approval,
         }
 
-    # 5. Otherwise, return the assistant's response.
+    # 5. For straightforward due-date questions, format from the trusted task
+    # records instead of relying on the LLM to reformat UTC timestamps.
+    due_date_answer = answer_due_date_question(
+        request.message or "",
+        db,
+        current_user["id"],
+        result.get("messages", []),
+    )
+    if due_date_answer is not None:
+        return {"status": "completed", "message": due_date_answer}
+
+    # Otherwise, return the assistant's response as usual.
     for message in reversed(result["messages"]):
         if isinstance(message, AIMessage) and message.content:
             return {
