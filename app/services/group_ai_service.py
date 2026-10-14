@@ -762,7 +762,7 @@ def get_group_tools(db: Session, user_id: int):
             "completed": task.completed,
             "assigned_to": task.assigned_to,
             "priority": task.priority,
-            "due_date": task.due_date,
+            "due_date": format_stored_due_date(task.due_date),
             "group_id": task.group_id,
             "created_by": task.created_by
         }
@@ -924,7 +924,7 @@ def get_group_tools(db: Session, user_id: int):
                         "description": task.description,
                         "completed": task.completed,
                         "group_id": task.group_id,
-                        "due_date": task.due_date,
+                        "due_date": format_stored_due_date(task.due_date),
                         "created_by": task.created_by
                     })
         return results
