@@ -69,6 +69,17 @@ TaskAPI V2 evolves the AI assistant from a simple conversational interface into 
 - Recommend what to focus on based on retrieved task priority, due dates, completion state, overdue status, and task context
 - Keep database operations scoped to the authenticated user and enforce group permissions in backend tools
 
+### Due-date and timezone policy
+
+- Set `APP_TIMEZONE` to an IANA timezone name; the default is `Asia/Kolkata`.
+- TaskAPI accepts ISO date-only values (`YYYY-MM-DD`) as well as ISO datetime values.
+- Date-only values mean midnight in `APP_TIMEZONE`.
+- Datetimes are normalized to UTC for database storage. API responses serialize stored due dates with a trailing `Z`.
+- The AI date/time tool returns the current local date/time and timezone so relative requests such as “tomorrow” can be resolved consistently.
+- When updating a task through the AI, use `clear_due_date: true` to remove an existing deadline.
+
+Legacy rows stored before this policy was introduced are not migrated automatically. Before deploying, confirm that existing naive `due_date` values were written as UTC; otherwise run a deliberate data migration to avoid shifting historical deadlines.
+
 ### 🧠 Task Intelligence
 
 The agent can do more than repeat a task list. For requests such as “What should I work on first?” or “What should I focus on today?”, it retrieves relevant tasks and reasons over their:
