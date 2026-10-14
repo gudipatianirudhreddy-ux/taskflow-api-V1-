@@ -194,8 +194,53 @@ def test_personal_agent_rejects_invalid_due_date_without_mutating(db, user1):
 
     result = tools["update_tasks"].invoke({
         "id": task_id,
+        "title": "Should not be saved",
         "due_date": "not-a-date",
     })
     assert result["error"].startswith("Invalid due date")
     task = db.query(models.tasks).filter(models.tasks.id == task_id).first()
+    assert task.title == "Invalid date test"
+    assert task.due_date is None
+
+
+
+def test_group_agent_accepts_and_clears_date_only_deadlines(db, user1):
+    """Group-task AI tools use the same date policy as personal task tools."""
+    from app.date_utils import normalize_due_date_input
+
+    tools = {t.name: t for t in get_group_tools(db, user1.id)}
+    group = tools["create_group"].invoke({
+        "name": "Date handling group",
+        "description": "Date normalization regression test",
+    })
+    group_id = group["id"]
+
+    created = tools["create_group_tasks"].invoke({
+        "group_id": group_id,
+        "title": "Group deadline",
+        "description": "Test",
+        "assigned_to": user1.id,
+        "due_date": "2026-10-20",
+    })
+    assert "error" not in created
+    task = db.query(models.GroupTask).filter(models.GroupTask.id == created["id"]).first()
+    expected = normalize_due_date_input("2026-10-20")
+    assert task.due_date == expected
+
+    updated = tools["update_group_task"].invoke({
+        "group_id": group_id,
+        "task_id": task.id,
+        "due_date": "2026-10-21",
+    })
+    assert "error" not in updated
+    db.refresh(task)
+    assert task.due_date == normalize_due_date_input("2026-10-21")
+
+    cleared = tools["update_group_task"].invoke({
+        "group_id": group_id,
+        "task_id": task.id,
+        "clear_due_date": True,
+    })
+    assert "error" not in cleared
+    db.refresh(task)
     assert task.due_date is None
