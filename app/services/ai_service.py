@@ -226,7 +226,7 @@ def get_task_tools(db: Session, user_id: int):
                      priority: Priority = Priority.MEDIUM,
     due_date: str | None = None
     ,completed: bool = False,estimated_duration: int | None = None):
-        """Create a new task for the current user."""
+        """Create a task. due_date must be an ISO date (YYYY-MM-DD) or ISO datetime string."""
 
         try:
             normalized_due_date = normalize_due_date_input(due_date)
@@ -334,7 +334,7 @@ def get_task_tools(db: Session, user_id: int):
     def update_tasks(id: int,title: str | None=None,content: str | None=None, completed:bool | None=None,priority: Priority | None = None,
     due_date: str | None = None,estimated_duration: int | None = None,
     clear_due_date: bool = False):
-        """Update a task using its ID for the current authenticated user."""
+        """Update a task. Use ISO date/time for due_date; set clear_due_date=True only to remove a deadline."""
         qr1=db.query(models.tasks).filter(models.tasks.users_id==user_id,models.tasks.id==id).first()
         if not qr1:
             return {"error":"Task not found"}
