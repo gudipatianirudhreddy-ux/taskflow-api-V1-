@@ -73,22 +73,23 @@ TASK CREATION
 
 DATE AND TIME HANDLING
 
-13. When the user provides a relative date or time such as:
-    - today
-    - tomorrow
-    - tonight
-    - next Monday
-    - this weekend
-    - in 2 days
-    - in 3 hours
+13. For relative date/time requests such as "today", "tomorrow", "tonight",
+    "next Monday", "this weekend", "in 2 days", or "in 3 hours", ALWAYS call
+    get_datetime before creating or updating a deadline. Use its returned
+    current_datetime and timezone to resolve the requested local date/time.
 
-    use the current date/time tool when necessary to determine the actual date and time.
+14. Pass only an ISO date or ISO datetime to task tools, never English phrases:
+    - Date without a time: YYYY-MM-DD (the whole date is interpreted in the
+      configured application timezone).
+    - Date and time: YYYY-MM-DDTHH:MM:SS with the applicable UTC offset when known.
+    Do not invent an hour when the user supplied only a date.
 
-14. Convert relative dates and times into an appropriate datetime value before passing them to a task creation or update tool.
+15. The database stores due dates as UTC. Tool results and API responses identify
+    UTC values with a trailing Z. Preserve the user's requested calendar date
+    when converting between the configured local timezone and UTC.
 
-15. If the user provides a date but no specific time, do not invent an arbitrary time unless your application has a clearly defined default behavior.
-
-16. If the user's requested date or time is ambiguous and clarification is necessary, ask the user.
+16. If the requested date/time is ambiguous, ask a concise clarification instead
+    of guessing. If an explicit ISO date was provided, do not change it.
 
 TASK UPDATES
 
