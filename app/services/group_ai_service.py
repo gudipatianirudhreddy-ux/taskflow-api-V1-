@@ -1,5 +1,9 @@
 from datetime import datetime
-from app.date_utils import normalize_due_date_input, format_stored_due_date
+from app.date_utils import (
+    normalize_due_date_input,
+    format_stored_due_date,
+    format_stored_due_date_local,
+)
 
 from langgraph.graph import START
 from app.schemas import Priority
@@ -507,6 +511,10 @@ DATE AND TIME HANDLING
 - Do not invent a time for date-only requests.
 - Invalid dates should return a clear error; do not claim a deadline was saved.
 - Due dates are stored as UTC and tool responses mark UTC values with a trailing Z.
+- Task tools include due_date_local, formatted in APP_TIMEZONE, for user-facing answers.
+  Prefer it over manually converting the UTC timestamp; name the timezone if useful.
+- When asked for a specific task's deadline, retrieve its current record and answer
+  from the returned data. Do not alter the task title or append an unfinished explanation.
 - Use clear_due_date=True when the user explicitly asks to remove a deadline.
 
 TASK PLANNING
@@ -674,6 +682,7 @@ def get_group_tools(db: Session, user_id: int):
             "created_by": tasks.created_by,
             "priority": tasks.priority,
             "due_date": format_stored_due_date(tasks.due_date),
+            "due_date_local": format_stored_due_date_local(tasks.due_date),
             "assigned_to":  tasks.assignee.username if tasks.assignee else None
         }
 
@@ -695,6 +704,7 @@ def get_group_tools(db: Session, user_id: int):
             "completed": task.completed,
             "priority": task.priority,
             "due_date": format_stored_due_date(task.due_date),
+            "due_date_local": format_stored_due_date_local(task.due_date),
             "created_by": task.created_by
         } for task in tasks]
 
@@ -780,6 +790,7 @@ def get_group_tools(db: Session, user_id: int):
             "assigned_to": task.assigned_to,
             "priority": task.priority,
             "due_date": format_stored_due_date(task.due_date),
+            "due_date_local": format_stored_due_date_local(task.due_date),
             "group_id": task.group_id,
             "created_by": task.created_by
         }
@@ -942,6 +953,7 @@ def get_group_tools(db: Session, user_id: int):
                         "completed": task.completed,
                         "group_id": task.group_id,
                         "due_date": format_stored_due_date(task.due_date),
+            "due_date_local": format_stored_due_date_local(task.due_date),
                         "created_by": task.created_by
                     })
         return results
