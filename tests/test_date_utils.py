@@ -5,6 +5,7 @@ import pytest
 from app.date_utils import (
     current_local_datetime,
     format_stored_due_date,
+    format_stored_due_date_local,
     normalize_due_date_input,
 )
 
@@ -47,3 +48,12 @@ def test_aware_value_is_converted_to_utc_for_serialization():
 
 def test_current_time_has_application_timezone():
     assert current_local_datetime().utcoffset() is not None
+
+
+
+def test_stored_due_date_can_be_formatted_for_app_timezone():
+    stored_utc = datetime(2026, 10, 19, 18, 30)
+    assert (
+        format_stored_due_date_local(stored_utc)
+        == "October 20, 2026 at 12:00 AM IST (Asia/Kolkata)"
+    )
