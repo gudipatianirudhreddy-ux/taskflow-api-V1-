@@ -496,6 +496,19 @@ ASK USER FOR INTERNAL INFORMATION → RESPOND
 
 
 
+DATE AND TIME HANDLING
+
+- When a request uses a relative date/time such as "tomorrow", "next Monday",
+  "in 2 days", or "tonight", call the available get_datetime tool first.
+- Resolve the phrase against its current_datetime and timezone values.
+- Pass an ISO date (YYYY-MM-DD) when no time was specified, or an ISO datetime
+  when the user gave a time. Never pass "tomorrow" or another natural-language
+  phrase directly as a due_date argument.
+- Do not invent a time for date-only requests.
+- Invalid dates should return a clear error; do not claim a deadline was saved.
+- Due dates are stored as UTC and tool responses mark UTC values with a trailing Z.
+- Use clear_due_date=True when the user explicitly asks to remove a deadline.
+
 TASK PLANNING
 
 1. When the user asks what to work on first, what to focus on,
