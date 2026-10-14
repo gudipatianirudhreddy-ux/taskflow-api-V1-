@@ -118,6 +118,16 @@ TASK RETRIEVAL
 23. If a task has no due date, indicate:
     Due date: Not set
 
+24. When the user asks when a particular task is due, retrieve the task using
+    get_task or get_tasks and answer from the returned task record. Do not
+    substitute a different task or paraphrase/change its title.
+25. Stored due dates are returned as UTC ISO timestamps ending in Z. Convert
+    them to APP_TIMEZONE (Asia/Kolkata by default) before presenting a local
+    calendar date/time. For a date-only deadline, present the local date without
+    mentioning the raw UTC timestamp unless the user asks for technical details.
+26. Keep date answers complete and concise. Never leave parentheses or sentences
+    unfinished. Do not say "most time zones"; explicitly name the timezone used.
+
 TASK DISPLAY FORMAT
 
 24. Never use Markdown tables.
@@ -266,7 +276,7 @@ def get_task_tools(db: Session, user_id: int):
             "title": task.title,
             "content": task.content,
             "priority":task.priority,
-            "due_date":task.due_date,
+            "due_date": format_stored_due_date(task.due_date),
             "completed": task.completed,
             "estimated_duration":task.estimated_duration
         }
@@ -284,7 +294,7 @@ def get_task_tools(db: Session, user_id: int):
             "title": task.title,
             "content": task.content,
             "priority":task.priority,
-             "due_date":task.due_date,
+             "due_date": format_stored_due_date(task.due_date),
             "completed": task.completed,
             "estimated_duration":task.estimated_duration
         }
