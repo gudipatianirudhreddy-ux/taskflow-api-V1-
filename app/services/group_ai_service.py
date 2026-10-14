@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.date_utils import normalize_due_date_input, format_stored_due_date
 
 from langgraph.graph import START
 from app.schemas import Priority
@@ -609,7 +610,7 @@ def get_group_tools(db: Session, user_id: int):
         description: str,
         assigned_to: int,
         priority: Priority = Priority.MEDIUM,
-        due_date: datetime | None = None
+        due_date: str | None = None
     ):
         """Create a new task for a member of the specified group."""
         group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
@@ -633,13 +634,18 @@ def get_group_tools(db: Session, user_id: int):
         if not assigned:
             return {"error": "Assigned user is not a member of this group"}
 
+        try:
+            normalized_due_date = normalize_due_date_input(due_date)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
         tasks = models.GroupTask(
             title=title,
             description=description,
             group_id=group_id,
             assigned_to=assigned_to,
             priority=priority,
-            due_date=due_date,
+            due_date=normalized_due_date,
             created_by=user_id,
             completed=False
         )
@@ -654,7 +660,7 @@ def get_group_tools(db: Session, user_id: int):
             "group_id": tasks.group_id,
             "created_by": tasks.created_by,
             "priority": tasks.priority,
-            "due_date": tasks.due_date,
+            "due_date": format_stored_due_date(tasks.due_date),
             "assigned_to":  tasks.assignee.username if tasks.assignee else None
         }
 
@@ -675,7 +681,7 @@ def get_group_tools(db: Session, user_id: int):
             "description": task.description,
             "completed": task.completed,
             "priority": task.priority,
-            "due_date": task.due_date,
+            "due_date": format_stored_due_date(task.due_date),
             "created_by": task.created_by
         } for task in tasks]
 
@@ -687,8 +693,9 @@ def get_group_tools(db: Session, user_id: int):
         description: str | None = None,
         assigned_to: int | None = None,
         priority: Priority | None = None,
-        due_date: datetime | None = None,
-        completed: bool | None = None
+        due_date: str | None = None,
+        completed: bool | None = None,
+        clear_due_date: bool = False
     ):
         """Update a task belonging to the specified group."""
         mem = db.query(models.Members).filter(
@@ -732,8 +739,15 @@ def get_group_tools(db: Session, user_id: int):
         if priority is not None:
             task.priority = priority
 
-        if due_date is not None:
-            task.due_date = due_date
+        if clear_due_date and due_date is not None:
+            return {"error": "Provide either a new due_date or clear_due_date, not both."}
+        if clear_due_date:
+            task.due_date = None
+        elif due_date is not None:
+            try:
+                task.due_date = normalize_due_date_input(due_date)
+            except ValueError as exc:
+                return {"error": str(exc)}
 
         if completed is not None:
             task.completed = completed
