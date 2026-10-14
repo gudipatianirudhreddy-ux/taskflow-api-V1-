@@ -244,3 +244,25 @@ def test_group_agent_accepts_and_clears_date_only_deadlines(db, user1):
     assert "error" not in cleared
     db.refresh(task)
     assert task.due_date is None
+
+
+def test_personal_task_retrieval_returns_utc_iso_due_dates(db, user1):
+    """Task retrieval tools use the same explicit UTC format as create/update tools."""
+    from app.date_utils import normalize_due_date_input, format_stored_due_date
+
+    tools = {t.name: t for t in get_task_tools(db, user1.id)}
+    created = tools["create_task"].invoke({
+        "title": "Prepare my resume for internships",
+        "content": "Check retrieval formatting",
+        "due_date": "2026-10-20",
+    })
+    expected = format_stored_due_date(normalize_due_date_input("2026-10-20"))
+
+    single = tools["get_task"].invoke({"id": created["id"]})
+    listing = tools["get_tasks"].invoke({})
+
+    assert single["title"] == "Prepare my resume for internships"
+    assert single["due_date"] == expected
+    listed = next(task for task in listing if task["id"] == created["id"])
+    assert listed["due_date"] == expected
+    assert expected.endswith("Z")
