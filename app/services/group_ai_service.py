@@ -625,7 +625,7 @@ def get_group_tools(db: Session, user_id: int):
         priority: Priority = Priority.MEDIUM,
         due_date: str | None = None
     ):
-        """Create a new task for a member of the specified group."""
+        """Create a group task. due_date must be an ISO date or ISO datetime string, not a relative phrase."""
         group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
         if not group:
             return {"error": "group not found"}
@@ -710,7 +710,7 @@ def get_group_tools(db: Session, user_id: int):
         completed: bool | None = None,
         clear_due_date: bool = False
     ):
-        """Update a task belonging to the specified group."""
+        """Update a group task. Use ISO date/time for due_date; set clear_due_date=True only to remove a deadline."""
         mem = db.query(models.Members).filter(
             models.Members.group_id == group_id,
             models.Members.user_id == user_id
