@@ -65,6 +65,24 @@ def format_stored_due_date(value: datetime | None) -> str | None:
     return value.isoformat().replace("+00:00", "Z")
 
 
+def format_stored_due_date_local(value: datetime | None) -> str | None:
+    """Format a stored UTC deadline in APP_TIMEZONE for user-facing answers."""
+    if value is None:
+        return None
+
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    else:
+        value = value.astimezone(timezone.utc)
+
+    local_value = value.astimezone(APP_TIMEZONE)
+    return (
+        local_value.strftime("%B %d, %Y at %I:%M %p ")
+        + (local_value.tzname() or str(APP_TIMEZONE))
+        + f" ({APP_TIMEZONE.key})"
+    )
+
+
 def current_local_datetime() -> datetime:
     """Return the current time as an aware datetime in APP_TIMEZONE."""
     return datetime.now(APP_TIMEZONE)
