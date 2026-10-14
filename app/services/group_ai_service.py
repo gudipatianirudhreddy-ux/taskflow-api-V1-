@@ -721,6 +721,15 @@ def get_group_tools(db: Session, user_id: int):
         if not task:
             return {"error": "Task not found in this group"}
 
+        if clear_due_date and due_date is not None:
+            return {"error": "Provide either a new due_date or clear_due_date, not both."}
+        normalized_due_date = None
+        if due_date is not None:
+            try:
+                normalized_due_date = normalize_due_date_input(due_date)
+            except ValueError as exc:
+                return {"error": str(exc)}
+
         if assigned_to is not None:
             assigned = db.query(models.Members).filter(
                 models.Members.group_id == group_id,
@@ -739,15 +748,10 @@ def get_group_tools(db: Session, user_id: int):
         if priority is not None:
             task.priority = priority
 
-        if clear_due_date and due_date is not None:
-            return {"error": "Provide either a new due_date or clear_due_date, not both."}
         if clear_due_date:
             task.due_date = None
         elif due_date is not None:
-            try:
-                task.due_date = normalize_due_date_input(due_date)
-            except ValueError as exc:
-                return {"error": str(exc)}
+            task.due_date = normalized_due_date
 
         if completed is not None:
             task.completed = completed
