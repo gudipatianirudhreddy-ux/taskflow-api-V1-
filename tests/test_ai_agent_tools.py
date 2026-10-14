@@ -251,8 +251,12 @@ def test_group_agent_accepts_and_clears_date_only_deadlines(db, user1):
 
 
 def test_personal_task_retrieval_returns_utc_iso_due_dates(db, user1):
-    """Task retrieval tools use the same explicit UTC format as create/update tools."""
-    from app.date_utils import normalize_due_date_input, format_stored_due_date
+    """Task retrieval tools return UTC timestamps plus local display values."""
+    from app.date_utils import (
+        normalize_due_date_input,
+        format_stored_due_date,
+        format_stored_due_date_local,
+    )
 
     tools = {t.name: t for t in get_task_tools(db, user1.id)}
     created = tools["create_task"].invoke({
