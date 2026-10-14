@@ -142,7 +142,7 @@ def answer_due_date_question(
             None,
         )
     refers_to_context = bool(
-        re.search(r"\\b(this|that|it|the task|my task)\\b", message, re.IGNORECASE)
+        re.search(r"\b(this|that|it|the task|my task)\b", message, re.IGNORECASE)
     )
     if selected is None and records and refers_to_context:
         for item in reversed(messages[:last_human_index]):
