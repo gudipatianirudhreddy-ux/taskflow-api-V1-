@@ -364,7 +364,7 @@ def get_task_tools(db: Session, user_id: int):
         "title": qr1.title,
         "content": qr1.content,
         "priority":qr1.priority,
-        "due_date":qr1.due_date,
+        "due_date": format_stored_due_date(qr1.due_date),
         "completed": qr1.completed,
         "estimated_duration":qr1.estimated_duration
     }
