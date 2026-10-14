@@ -141,7 +141,10 @@ def answer_due_date_question(
             (record for record in records if _title_mentioned(str(record.get("title", "")), message)),
             None,
         )
-    if selected is None and records:
+    refers_to_context = bool(
+        re.search(r"\\b(this|that|it|the task|my task)\\b", message, re.IGNORECASE)
+    )
+    if selected is None and records and refers_to_context:
         for item in reversed(messages[:last_human_index]):
             text = getattr(item, "content", "")
             if not isinstance(text, str):
@@ -153,7 +156,7 @@ def answer_due_date_question(
             if len(matches) == 1:
                 selected = matches[0]
                 break
-    if selected is None and len(records) == 1:
+    if selected is None and len(records) == 1 and refers_to_context:
         selected = records[0]
 
     if selected is not None:
