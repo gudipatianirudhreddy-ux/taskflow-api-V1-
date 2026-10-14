@@ -1,9 +1,29 @@
-from pydantic import BaseModel, ConfigDict,EmailStr,constr
+from pydantic import BaseModel, ConfigDict, EmailStr, constr, Field, field_validator, field_serializer
 from typing import Optional,Literal 
 from datetime import datetime
 from app.models import InvitationStatus, Role
 from app.models import Priority
-class Tasks(BaseModel):
+from app.date_utils import normalize_due_date_input, format_stored_due_date
+
+
+class DueDateInputModel(BaseModel):
+    """Normalize incoming due dates to naive UTC for existing DB columns."""
+
+    @field_validator("due_date", mode="before", check_fields=False)
+    @classmethod
+    def parse_due_date(cls, value):
+        return normalize_due_date_input(value)
+
+
+class DueDateResponseModel(BaseModel):
+    """Serialize stored UTC datetimes with an explicit Z suffix."""
+
+    @field_serializer("due_date", when_used="json", check_fields=False)
+    def serialize_due_date(self, value):
+        return format_stored_due_date(value)
+
+
+class Tasks(DueDateInputModel):
     title: str
     content: str
     completed: bool=False
@@ -14,7 +34,7 @@ class Tasks(BaseModel):
 
 class TasksCreate(Tasks):
     pass
-class TasksPost(BaseModel):
+class TasksPost(DueDateResponseModel):
     id: int
     title: str | None = None
     content: str | None = None
@@ -24,6 +44,32 @@ class TasksPost(BaseModel):
     estimated_duration: int | None = None
     class Config:
         from_attributes=True
+
+class AgentTaskCreateArgs(BaseModel):
+    """Arguments for the AI personal-task creation tool."""
+    title: str
+    content: str
+    completed: bool = False
+    priority: Priority = Priority.MEDIUM
+    due_date: str | None = Field(default=None, description="ISO date YYYY-MM-DD or ISO datetime; never pass natural-language phrases.")
+    estimated_duration: int | None = None
+
+
+class AgentTaskUpdateArgs(BaseModel):
+    """Arguments for the AI personal-task update tool.
+
+    Provide due_date as an ISO date/time string. Set clear_due_date=True to
+    remove an existing deadline; do not set both fields at once.
+    """
+    id: int
+    title: str | None = None
+    content: str | None = None
+    completed: bool | None = None
+    priority: Priority | None = None
+    due_date: str | None = Field(default=None, description="ISO date YYYY-MM-DD or ISO datetime; never pass natural-language phrases.")
+    estimated_duration: int | None = None
+    clear_due_date: bool = Field(default=False, description="Set true only when the user explicitly asks to remove the current deadline.")
+
 
 class UserCreate(BaseModel):
     username: str
@@ -83,7 +129,7 @@ class GroupMemberResponse(BaseModel):
 class MessageResponse(BaseModel):
     message: str
 
-class GroupTasksCreate(BaseModel):
+class GroupTasksCreate(DueDateInputModel):
     title: str
     description:  Optional[str]=None
     priority: Priority | None = None
@@ -92,7 +138,7 @@ class GroupTasksCreate(BaseModel):
     assigned_to: int
     
 
-class GroupTaskUpdate(BaseModel):
+class GroupTaskUpdate(DueDateInputModel):
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None
@@ -100,7 +146,7 @@ class GroupTaskUpdate(BaseModel):
     due_date: Optional[datetime] = None
     priority: Optional[Priority] = None
 
-class GroupTaskResponse(BaseModel):
+class GroupTaskResponse(DueDateResponseModel):
     id: int
     title: str
     description: Optional[str]
@@ -137,20 +183,20 @@ class AIConversationResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class SubtaskCreate(BaseModel):
+class SubtaskCreate(DueDateInputModel):
     title: str
     content: str | None = None
     completed: bool = False
     due_date: datetime | None = None
 
-class SubtaskUpdate(BaseModel):
+class SubtaskUpdate(DueDateInputModel):
     title: str | None = None
     content: str | None = None
     completed: bool | None = None
     due_date: datetime | None = None
 
 
-class SubtaskResponse(BaseModel):
+class SubtaskResponse(DueDateResponseModel):
     id: int
     title: str
     content: str | None
@@ -161,7 +207,7 @@ class SubtaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class GroupSubtaskCreate(BaseModel):
+class GroupSubtaskCreate(DueDateInputModel):
     title: str
     description: str | None = None
     group_task_id: Optional[int] = None
@@ -169,7 +215,7 @@ class GroupSubtaskCreate(BaseModel):
     due_date: datetime | None = None
 
 
-class GroupSubtaskResponse(BaseModel):
+class GroupSubtaskResponse(DueDateResponseModel):
     id: int
     title: str
     description: str | None
@@ -181,7 +227,7 @@ class GroupSubtaskResponse(BaseModel):
     class Config:
         from_attributes = True
 
-class GroupSubtaskUpdate(BaseModel):
+class GroupSubtaskUpdate(DueDateInputModel):
     title: Optional[str] = None
     description: Optional[str] = None
     completed: Optional[bool] = None

@@ -6,6 +6,7 @@ from app import models, schemas
 from sqlalchemy.orm import Session
 from langchain.tools import tool
 from datetime import datetime
+from app.date_utils import normalize_due_date_input, current_local_datetime, format_stored_due_date
 from app.models import Priority
 from app.services.checkpoint import checkpointer
 from app.services.task_planner import build_task_plan
@@ -72,22 +73,23 @@ TASK CREATION
 
 DATE AND TIME HANDLING
 
-13. When the user provides a relative date or time such as:
-    - today
-    - tomorrow
-    - tonight
-    - next Monday
-    - this weekend
-    - in 2 days
-    - in 3 hours
+13. For relative date/time requests such as "today", "tomorrow", "tonight",
+    "next Monday", "this weekend", "in 2 days", or "in 3 hours", ALWAYS call
+    get_datetime before creating or updating a deadline. Use its returned
+    current_datetime and timezone to resolve the requested local date/time.
 
-    use the current date/time tool when necessary to determine the actual date and time.
+14. Pass only an ISO date or ISO datetime to task tools, never English phrases:
+    - Date without a time: YYYY-MM-DD (the whole date is interpreted in the
+      configured application timezone).
+    - Date and time: YYYY-MM-DDTHH:MM:SS with the applicable UTC offset when known.
+    Do not invent an hour when the user supplied only a date.
 
-14. Convert relative dates and times into an appropriate datetime value before passing them to a task creation or update tool.
+15. The database stores due dates as UTC. Tool results and API responses identify
+    UTC values with a trailing Z. Preserve the user's requested calendar date
+    when converting between the configured local timezone and UTC.
 
-15. If the user provides a date but no specific time, do not invent an arbitrary time unless your application has a clearly defined default behavior.
-
-16. If the user's requested date or time is ambiguous and clarification is necessary, ask the user.
+16. If the requested date/time is ambiguous, ask a concise clarification instead
+    of guessing. If an explicit ISO date was provided, do not change it.
 
 TASK UPDATES
 
@@ -219,18 +221,23 @@ Use actual newlines between sections.
 """
 def get_task_tools(db: Session, user_id: int):
 
-    @tool(args_schema=schemas.Tasks)
+    @tool(args_schema=schemas.AgentTaskCreateArgs)
     def create_task(title: str, content: str,
                      priority: Priority = Priority.MEDIUM,
-    due_date: datetime | None = None
+    due_date: str | None = None
     ,completed: bool = False,estimated_duration: int | None = None):
-        """Create a new task for the current user."""
+        """Create a task. due_date must be an ISO date (YYYY-MM-DD) or ISO datetime string."""
+
+        try:
+            normalized_due_date = normalize_due_date_input(due_date)
+        except ValueError as exc:
+            return {"error": str(exc)}
 
         task = models.tasks(
             title=title,
             content=content,
             priority= priority,
-            due_date= due_date,
+            due_date= normalized_due_date,
             completed=completed,
             users_id=user_id,
             estimated_duration=estimated_duration
@@ -245,7 +252,7 @@ def get_task_tools(db: Session, user_id: int):
             "title": task.title,
             "content": task.content,
             "priority":task.priority,
-            "due_date":task.due_date,
+            "due_date":format_stored_due_date(task.due_date),
             "completed": task.completed,
             "estimated_duration":task.estimated_duration
         }
@@ -323,13 +330,23 @@ def get_task_tools(db: Session, user_id: int):
             print("Database deletion failed:", repr(e))
             return {"error": "Database deletion failed"}
         return {"status":"deleted","message":f"Task {task.title} deleted successfully"}
-    @tool(args_schema=schemas.TasksPost)
+    @tool(args_schema=schemas.AgentTaskUpdateArgs)
     def update_tasks(id: int,title: str | None=None,content: str | None=None, completed:bool | None=None,priority: Priority | None = None,
-    due_date: datetime | None = None,estimated_duration: int | None = None):
-        """Update a task using its ID for the current authenticated user."""
+    due_date: str | None = None,estimated_duration: int | None = None,
+    clear_due_date: bool = False):
+        """Update a task. Use ISO date/time for due_date; set clear_due_date=True only to remove a deadline."""
         qr1=db.query(models.tasks).filter(models.tasks.users_id==user_id,models.tasks.id==id).first()
         if not qr1:
             return {"error":"Task not found"}
+        if clear_due_date and due_date is not None:
+            return {"error": "Provide either a new due_date or clear_due_date, not both."}
+        normalized_due_date = None
+        if due_date is not None:
+            try:
+                normalized_due_date = normalize_due_date_input(due_date)
+            except ValueError as exc:
+                return {"error": str(exc)}
+
         if title is not None:
              qr1.title = title
         if content is not None:
@@ -338,8 +355,10 @@ def get_task_tools(db: Session, user_id: int):
             qr1.completed = completed
         if priority is not None:
             qr1.priority =priority
-        if due_date is not None:
-            qr1.due_date=due_date 
+        if clear_due_date:
+            qr1.due_date = None
+        elif due_date is not None:
+            qr1.due_date = normalized_due_date
         if estimated_duration is not None:
             qr1.estimated_duration=estimated_duration      
         
@@ -350,15 +369,19 @@ def get_task_tools(db: Session, user_id: int):
         "title": qr1.title,
         "content": qr1.content,
         "priority":qr1.priority,
-        "due_date":qr1.due_date,
+        "due_date": format_stored_due_date(qr1.due_date),
         "completed": qr1.completed,
         "estimated_duration":qr1.estimated_duration
     }
     @tool
     def get_datetime():
         """Get the current date and time. Use this when the user mentions relative dates or times such as today, tomorrow, tonight, next week, or Monday."""
-        now=datetime.now()
-        return {"current_datetime":now.isoformat()}
+        now = current_local_datetime()
+        return {
+            "current_datetime": now.isoformat(),
+            "timezone": str(now.tzinfo),
+            "date_policy": "Due dates are interpreted in this timezone and stored as UTC."
+        }
     @tool
     def plan_my_tasks():
         """Analyze the current user's incomplete personal tasks and

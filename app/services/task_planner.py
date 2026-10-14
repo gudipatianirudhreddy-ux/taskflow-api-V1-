@@ -1,5 +1,6 @@
 
 from datetime import datetime, timezone
+from app.date_utils import format_stored_due_date
 from typing import Any
 
 
@@ -117,7 +118,7 @@ def build_task_plan(
         elif due_date is not None:
             reason = (
                 f"It has {priority} priority and a deadline of "
-                f"{due_date.isoformat(sep=' ', timespec='minutes')}."
+                f"{format_stored_due_date(due_date)} (UTC)."
             )
         else:
             reason = (
@@ -129,11 +130,7 @@ def build_task_plan(
             "id": task.get("id"),
             "title": task.get("title", "Untitled task"),
             "priority": priority,
-            "due_date": (
-                due_date.isoformat(sep=" ", timespec="minutes")
-                if due_date is not None
-                else None
-            ),
+            "due_date": format_stored_due_date(due_date),
             "overdue": overdue,
             "estimated_duration": estimated_duration,
             "reason": reason,

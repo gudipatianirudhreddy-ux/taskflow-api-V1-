@@ -102,3 +102,23 @@ def test_delete_task_and_authorization(auth_client_user1, auth_client_user2):
     # Check it no longer exists
     get_res = auth_client_user1.get(f"/tasks/{task_id}")
     assert get_res.status_code == 404
+
+
+
+def test_create_task_accepts_date_only_and_returns_explicit_utc(auth_client_user1):
+    """The REST API accepts YYYY-MM-DD and documents stored UTC with a Z suffix."""
+    from app.date_utils import format_stored_due_date, normalize_due_date_input
+
+    response = auth_client_user1.post(
+        "/tasks/",
+        json={
+            "title": "Date-only API task",
+            "content": "Regression test",
+            "due_date": "2026-10-20",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    expected = normalize_due_date_input("2026-10-20")
+    assert data["due_date"] == format_stored_due_date(expected)
+    assert data["due_date"].endswith("Z")

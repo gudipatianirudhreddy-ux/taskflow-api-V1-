@@ -1,4 +1,5 @@
 from datetime import datetime
+from app.date_utils import normalize_due_date_input, format_stored_due_date
 
 from langgraph.graph import START
 from app.schemas import Priority
@@ -495,6 +496,19 @@ ASK USER FOR INTERNAL INFORMATION → RESPOND
 
 
 
+DATE AND TIME HANDLING
+
+- When a request uses a relative date/time such as "tomorrow", "next Monday",
+  "in 2 days", or "tonight", call the available get_datetime tool first.
+- Resolve the phrase against its current_datetime and timezone values.
+- Pass an ISO date (YYYY-MM-DD) when no time was specified, or an ISO datetime
+  when the user gave a time. Never pass "tomorrow" or another natural-language
+  phrase directly as a due_date argument.
+- Do not invent a time for date-only requests.
+- Invalid dates should return a clear error; do not claim a deadline was saved.
+- Due dates are stored as UTC and tool responses mark UTC values with a trailing Z.
+- Use clear_due_date=True when the user explicitly asks to remove a deadline.
+
 TASK PLANNING
 
 1. When the user asks what to work on first, what to focus on,
@@ -609,9 +623,9 @@ def get_group_tools(db: Session, user_id: int):
         description: str,
         assigned_to: int,
         priority: Priority = Priority.MEDIUM,
-        due_date: datetime | None = None
+        due_date: str | None = None
     ):
-        """Create a new task for a member of the specified group."""
+        """Create a group task. due_date must be an ISO date or ISO datetime string, not a relative phrase."""
         group = db.query(models.Groups).filter(models.Groups.id == group_id).first()
         if not group:
             return {"error": "group not found"}
@@ -633,13 +647,18 @@ def get_group_tools(db: Session, user_id: int):
         if not assigned:
             return {"error": "Assigned user is not a member of this group"}
 
+        try:
+            normalized_due_date = normalize_due_date_input(due_date)
+        except ValueError as exc:
+            return {"error": str(exc)}
+
         tasks = models.GroupTask(
             title=title,
             description=description,
             group_id=group_id,
             assigned_to=assigned_to,
             priority=priority,
-            due_date=due_date,
+            due_date=normalized_due_date,
             created_by=user_id,
             completed=False
         )
@@ -654,7 +673,7 @@ def get_group_tools(db: Session, user_id: int):
             "group_id": tasks.group_id,
             "created_by": tasks.created_by,
             "priority": tasks.priority,
-            "due_date": tasks.due_date,
+            "due_date": format_stored_due_date(tasks.due_date),
             "assigned_to":  tasks.assignee.username if tasks.assignee else None
         }
 
@@ -675,7 +694,7 @@ def get_group_tools(db: Session, user_id: int):
             "description": task.description,
             "completed": task.completed,
             "priority": task.priority,
-            "due_date": task.due_date,
+            "due_date": format_stored_due_date(task.due_date),
             "created_by": task.created_by
         } for task in tasks]
 
@@ -687,10 +706,11 @@ def get_group_tools(db: Session, user_id: int):
         description: str | None = None,
         assigned_to: int | None = None,
         priority: Priority | None = None,
-        due_date: datetime | None = None,
-        completed: bool | None = None
+        due_date: str | None = None,
+        completed: bool | None = None,
+        clear_due_date: bool = False
     ):
-        """Update a task belonging to the specified group."""
+        """Update a group task. Use ISO date/time for due_date; set clear_due_date=True only to remove a deadline."""
         mem = db.query(models.Members).filter(
             models.Members.group_id == group_id,
             models.Members.user_id == user_id
@@ -714,6 +734,15 @@ def get_group_tools(db: Session, user_id: int):
         if not task:
             return {"error": "Task not found in this group"}
 
+        if clear_due_date and due_date is not None:
+            return {"error": "Provide either a new due_date or clear_due_date, not both."}
+        normalized_due_date = None
+        if due_date is not None:
+            try:
+                normalized_due_date = normalize_due_date_input(due_date)
+            except ValueError as exc:
+                return {"error": str(exc)}
+
         if assigned_to is not None:
             assigned = db.query(models.Members).filter(
                 models.Members.group_id == group_id,
@@ -732,8 +761,10 @@ def get_group_tools(db: Session, user_id: int):
         if priority is not None:
             task.priority = priority
 
-        if due_date is not None:
-            task.due_date = due_date
+        if clear_due_date:
+            task.due_date = None
+        elif due_date is not None:
+            task.due_date = normalized_due_date
 
         if completed is not None:
             task.completed = completed
@@ -748,7 +779,7 @@ def get_group_tools(db: Session, user_id: int):
             "completed": task.completed,
             "assigned_to": task.assigned_to,
             "priority": task.priority,
-            "due_date": task.due_date,
+            "due_date": format_stored_due_date(task.due_date),
             "group_id": task.group_id,
             "created_by": task.created_by
         }
@@ -910,7 +941,7 @@ def get_group_tools(db: Session, user_id: int):
                         "description": task.description,
                         "completed": task.completed,
                         "group_id": task.group_id,
-                        "due_date": task.due_date,
+                        "due_date": format_stored_due_date(task.due_date),
                         "created_by": task.created_by
                     })
         return results
