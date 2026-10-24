@@ -201,3 +201,118 @@ def test_group_subtasks_lifecycle_and_authorization(auth_client_user1, auth_clie
     # Verify subtask is gone in DB
     sub_in_db = db.query(models.GroupSubtask).filter(models.GroupSubtask.id == subtask_id).first()
     assert sub_in_db is None
+
+
+
+def test_admin_group_task_permissions(
+    auth_client_user1,
+    auth_client_user2,
+    user1,
+    user2,
+    group_with_members,
+    db,
+):
+    """Admin can manage/view group tasks, but cannot delete them."""
+    group_id = group_with_members
+
+    membership = db.query(models.Members).filter(
+        models.Members.group_id == group_id,
+        models.Members.user_id == user2.id,
+    ).first()
+    membership.role = models.Role.admin
+    db.commit()
+
+    # Owner creates a task assigned to themselves.
+    created = auth_client_user1.post(
+        f"/groups/{group_id}/tasks",
+        json={
+            "title": "Owner's task",
+            "description": "Admin should be able to manage this",
+            "assigned_to": user1.id,
+        },
+    )
+    assert created.status_code == 201
+    task_id = created.json()["id"]
+
+    # Admin can create a task and assign it to another group member.
+    admin_create = auth_client_user2.post(
+        f"/groups/{group_id}/tasks",
+        json={
+            "title": "Admin-created task",
+            "description": "Created by admin",
+            "assigned_to": user1.id,
+        },
+    )
+    assert admin_create.status_code == 201
+
+    # Admin sees all tasks and can retrieve/update a task assigned to the owner.
+    admin_list = auth_client_user2.get(f"/groups/{group_id}/tasks")
+    assert admin_list.status_code == 200
+    assert len(admin_list.json()) == 2
+
+    admin_get = auth_client_user2.get(f"/groups/{group_id}/tasks/{task_id}")
+    assert admin_get.status_code == 200
+
+    admin_update = auth_client_user2.patch(
+        f"/groups/{group_id}/tasks/{task_id}",
+        json={"description": "Updated by admin"},
+    )
+    assert admin_update.status_code == 200
+    assert admin_update.json()["description"] == "Updated by admin"
+
+    # Admin is not allowed to delete group tasks; only the owner can.
+    admin_delete = auth_client_user2.delete(
+        f"/groups/{group_id}/tasks/{task_id}"
+    )
+    assert admin_delete.status_code == 403
+    assert admin_delete.json()["detail"] == "Only the group owner can delete tasks"
+
+
+def test_assignee_can_delete_subtask_but_unassigned_member_cannot(
+    auth_client_user1,
+    auth_client_user2,
+    auth_client_user3,
+    user2,
+    user3,
+    group_with_members,
+    db,
+):
+    """The assigned user can delete a subtask; another group member cannot."""
+    group_id = group_with_members
+
+    # Add user3 as a regular, unassigned group member for this authorization test.
+    db.add(models.Members(
+        group_id=group_id,
+        user_id=user3.id,
+        role=models.Role.member,
+    ))
+    db.commit()
+
+    task_res = auth_client_user1.post(
+        f"/groups/{group_id}/tasks",
+        json={
+            "title": "Assigned task",
+            "description": "Subtask permissions",
+            "assigned_to": user2.id,
+        },
+    )
+    assert task_res.status_code == 201
+    task_id = task_res.json()["id"]
+
+    subtask_res = auth_client_user2.post(
+        f"/groups/{group_id}/tasks/{task_id}/subtasks",
+        json={"title": "Subtask to protect"},
+    )
+    assert subtask_res.status_code == 201
+    subtask_id = subtask_res.json()["id"]
+
+    unassigned_delete = auth_client_user3.delete(
+        f"/groups/{group_id}/tasks/subtasks/{subtask_id}"
+    )
+    assert unassigned_delete.status_code == 403
+
+    assignee_delete = auth_client_user2.delete(
+        f"/groups/{group_id}/tasks/subtasks/{subtask_id}"
+    )
+    assert assignee_delete.status_code == 200
+    assert assignee_delete.json()["message"] == "Subtask deleted successfully"
