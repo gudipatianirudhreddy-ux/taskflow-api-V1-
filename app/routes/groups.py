@@ -26,17 +26,15 @@ def create_group(posts: schemas.Group,db: Session = Depends(database.get_db),cur
 
 @router.get('/',status_code=status.HTTP_200_OK, response_model=List[schemas.GroupPost])
 def get_groups(db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    getting=db.query(models.Groups).filter(models.Groups.owners_id==current_user["id"]).all()
-    if not getting:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not authorized or validated")
-    
+    getting=db.query(models.Groups).join(models.Members,models.Groups.id==models.Members.group_id).filter(models.Members.user_id==current_user["id"]).all()
+
     return getting
 
 @router.get("/{group_id}",status_code=status.HTTP_200_OK, response_model=schemas.GroupPost)
 def getting_post(group_id: int, db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    post=db.query(models.Groups).filter(models.Groups.id==group_id, models.Groups.owners_id==current_user["id"]).first()
+    post=db.query(models.Groups).join(models.Members,models.Groups.id==models.Members.group_id).filter(models.Members.user_id==current_user["id"],models.Groups.id==group_id).first()
     if not post:
-         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not there or not authorized")
+         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not there or not authorized")
     return post
 
 @router.patch("/{group_id}",status_code=status.HTTP_302_FOUND, response_model=schemas.GroupPost)
@@ -244,10 +242,10 @@ def make_tasks(group_id: int ,posts: schemas.GroupTasksCreate,db: Session = Depe
     memeber=db.query(models.Members).filter(models.Members.group_id==group_id, models.Members.user_id==current_user["id"]).first()
     if not memeber:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Member does not belong to this group")
-    if group.owners_id != current_user["id"]:
+    if group.owners_id != current_user["id"] and memeber.role != models.Role.admin:
            raise HTTPException(
                           status_code=403,
-                          detail="Only the group owner can create tasks."
+                          detail="Only the group owner or admin can create tasks."
             )
     verify=db.query(models.Members).filter(models.Members.group_id==group_id, models.Members.user_id==posts.assigned_to).first()
     if not verify:
@@ -272,7 +270,7 @@ def get_group_tasks(group_id: int, db: Session = Depends(database.get_db), curre
     if not member:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not a member of this group")
 
-    if group.owners_id == current_user["id"]:
+    if group.owners_id == current_user["id"] or  member.role == models.Role.admin:
         tasks = db.query(models.GroupTask).filter(models.GroupTask.group_id == group_id).all()
     else:
         tasks = db.query(models.GroupTask).filter(
@@ -303,7 +301,7 @@ def get_group_task(group_id: int, task_id: int, db: Session = Depends(database.g
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this group")
 
-    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+    if group.owners_id != current_user["id"] and  member.role != models.Role.admin and task.assigned_to != current_user["id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to view this task")
 
     return task
@@ -336,14 +334,15 @@ def update_group_task(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this group")
 
     is_owner = (group.owners_id == current_user["id"])
+    is_admin = (member.role == models.Role.admin)
     is_assigned = (task.assigned_to == current_user["id"])
 
-    if not is_owner and not is_assigned:
+    if not is_owner and not is_admin and not is_assigned:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this task")
 
     update_data = task_update.model_dump(exclude_unset=True)
 
-    if not is_owner:
+    if not is_owner and not is_admin:
         if "assigned_to" in update_data and update_data["assigned_to"] != task.assigned_to:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Members cannot reassign tasks")
 
@@ -429,7 +428,7 @@ def create_group_subtask(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this group")
 
-    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+    if group.owners_id != current_user["id"] and member.role != models.Role.admin and task.assigned_to != current_user["id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to add subtasks to this task")
 
     subtask_data = subtask.model_dump(exclude_unset=True)
@@ -466,7 +465,7 @@ def get_group_subtasks(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found in this group")
 
-    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+    if group.owners_id != current_user["id"] and member.role != models.Role.admin and task.assigned_to != current_user["id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to view subtasks for this task")
 
     subtasks = db.query(models.GroupSubtask).filter(models.GroupSubtask.group_task_id == task_id).all()
@@ -505,7 +504,7 @@ def update_group_subtask(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found in this group")
 
     task = db.query(models.GroupTask).filter(models.GroupTask.id == subtask.group_task_id).first()
-    if group.owners_id != current_user["id"] and task.assigned_to != current_user["id"]:
+    if group.owners_id != current_user["id"] and member.role != models.Role.admin and task.assigned_to != current_user["id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You are not authorized to update this subtask")
 
     update_data = subtask_update.model_dump(exclude_unset=True)

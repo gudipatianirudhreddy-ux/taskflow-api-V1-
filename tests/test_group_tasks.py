@@ -25,8 +25,7 @@ def test_create_group_task_and_permissions(auth_client_user1, auth_client_user2,
         "assigned_to": user2.id
     })
     assert member_create.status_code == 403
-    assert member_create.json()["detail"] == "Only the group owner can create tasks."
-
+    assert member_create.json()["detail"] == "Only the group owner or admin can create tasks."
     # 2. Owner assigns to non-member user3 -> 400
     invalid_assign = auth_client_user1.post(f"/groups/{group_id}/tasks", json={
         "title": "Task 1",

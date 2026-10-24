@@ -107,7 +107,7 @@ async def google_callback(requests: Request,response: Response,db: Session = Dep
 
     
        
-    
+
     
 @router.get("/me", response_model=schemas.UserPost)
 def get_login(current_user=Depends(get_current_user),db: Session = Depends(database.get_db)):
@@ -154,6 +154,12 @@ def logout(response: Response):
     response.delete_cookie("refresh_token")
     return {"message": "Logged out successfully"}
 
-    
+
+@router.get("/health")
+def health():
+    return {"message": "Health check"}
+
+
+
             
 

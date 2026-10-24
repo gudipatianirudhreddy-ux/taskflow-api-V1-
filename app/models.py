@@ -16,7 +16,6 @@ class Role(str, enum.Enum):
     member="member"
     admin="admin"
     owner="owner"
-
 class Priority(str, enum.Enum):
     LOW = "low"
     MEDIUM = "medium"
