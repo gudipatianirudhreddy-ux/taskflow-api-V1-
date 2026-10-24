@@ -230,3 +230,34 @@ def test_leave_group_and_remove_member(
     # User 2 is no longer a member
     unauth_members = auth_client_user2.get(f"/groups/{group_id}/members")
     assert unauth_members.status_code == 403
+
+
+
+def test_joined_member_can_get_group_details(
+    auth_client_user1,
+    auth_client_user2,
+    user2,
+):
+    """A member who joined a group can retrieve its details."""
+    group_res = auth_client_user1.post(
+        "/groups/",
+        json={"name": "Member-visible group", "description": "Visible to members"},
+    )
+    assert group_res.status_code == 201
+    group_id = group_res.json()["id"]
+
+    invite_res = auth_client_user1.post(
+        f"/groups/{group_id}/invite",
+        json={"email": user2.email},
+    )
+    assert invite_res.status_code == 201
+
+    accept_res = auth_client_user2.get(
+        f"/groups/invitations/{invite_res.json()['token']}/accept"
+    )
+    assert accept_res.status_code == 202
+
+    details = auth_client_user2.get(f"/groups/{group_id}")
+    assert details.status_code == 200
+    assert details.json()["id"] == group_id
+    assert details.json()["name"] == "Member-visible group"
