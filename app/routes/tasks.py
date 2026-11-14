@@ -61,21 +61,21 @@ def create_subtask(task_id: int, subtask:schemas.SubtaskCreate, db: Session=Depe
 
 @router.get("/{task_id}/subtasks",status_code=status.HTTP_200_OK,response_model=List[schemas.SubtaskResponse])
 def get_subtasks(task_id: int, db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    sub = (
-    db.query(models.subtasks)
-    .join(models.tasks, models.subtasks.task_id == models.tasks.id)
-    .filter(
-        models.subtasks.task_id == task_id,
+    task = db.query(models.tasks).filter(
+        models.tasks.id == task_id,
         models.tasks.users_id == current_user["id"]
-    )
-    .all()
-)
-    if not sub:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtasks not found or you do not have permission to view subtasks.")
+    ).first()
+    if not task:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Task not found or you do not have permission to view subtasks."
+        )
+
+    sub = db.query(models.subtasks).filter(models.subtasks.task_id == task_id).all()
     return sub
 
 @router.put("/subtasks/{subtask_id}",status_code=status.HTTP_200_OK,response_model=schemas.SubtaskResponse)
-def update_subtask(subtask_id: int,subtask:schemas.SubtaskCreate,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
+def update_subtask(subtask_id: int,subtask:schemas.SubtaskUpdate,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
     sub = (
     db.query(models.subtasks)
     .join(
@@ -109,8 +109,9 @@ def delete_subtask(subtask_id: int,db: Session = Depends(database.get_db),curren
         models.tasks.users_id == current_user["id"]
     )
     )
-    if not sub.first():
+    subtask_obj = sub.first()
+    if not subtask_obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found or you do not have permission to delete subtask.")
-    db.delete(sub.first())
+    db.delete(subtask_obj)
     db.commit()
     return {"Message":"Deleted successfully"}
