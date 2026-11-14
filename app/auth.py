@@ -1,6 +1,7 @@
 from datetime import timedelta, datetime
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from starlette import status
@@ -13,153 +14,218 @@ from . import schemas, database, models
 from app.Oauth import oauth
 import os
 import asyncio
+
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
-router=APIRouter(
+
+router = APIRouter(
     prefix='/auth',
     tags=['auth']
 )
 
-# oauth2_bearer = OAuth2PasswordBearer(tokenUrl='auth/google')
 oauth2_bearer = OAuth2PasswordBearer(tokenUrl="/auth/google/login")
 
 
-def access_token(username: str, id: int, expires_delta: timedelta):
-    encode={"sub": username, "id":id, "type": "access"}
-    expires=datetime.utcnow()+expires_delta
-    encode.update({"exp": expires})
-    return jwt.encode(encode, SECRET_KEY,ALGORITHM)
+def get_cookie_settings(request: Request):
+    env_secure = os.getenv("COOKIE_SECURE")
+    if env_secure is not None:
+        secure = env_secure.lower() == "true"
+    else:
+        secure = request.url.scheme == "https"
 
-def create_refresh_token(username: str, id: int, expires_delta: timedelta):
-    encode = {"sub": username, "id": id,"type":"refresh"}
+    env_samesite = os.getenv("COOKIE_SAMESITE")
+    if env_samesite is not None:
+        samesite = env_samesite.lower()
+    else:
+        samesite = "none" if secure else "lax"
+
+    return secure, samesite
+
+
+def access_token(username: str, id: int, expires_delta: timedelta):
+    encode = {"sub": username, "id": id, "type": "access"}
     expires = datetime.utcnow() + expires_delta
     encode.update({"exp": expires})
     return jwt.encode(encode, SECRET_KEY, ALGORITHM)
-    
+
+
+def create_refresh_token(username: str, id: int, expires_delta: timedelta):
+    encode = {"sub": username, "id": id, "type": "refresh"}
+    expires = datetime.utcnow() + expires_delta
+    encode.update({"exp": expires})
+    return jwt.encode(encode, SECRET_KEY, ALGORITHM)
+
 
 def get_current_user(request: Request):
     token = request.cookies.get("access_token")
     if not token:
+        auth_hdr = request.headers.get("Authorization")
+        if auth_hdr and auth_hdr.startswith("Bearer "):
+            token = auth_hdr.split(" ", 1)[1]
+    if not token:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing token")
     if token.startswith("Bearer "):
-        token = token.split(" ", 1)[1]  
+        token = token.split(" ", 1)[1]
     try:
-        payload=jwt.decode(token, SECRET_KEY,algorithms=[ALGORITHM])
-        username: str=payload.get('sub')
-        user_id: int =payload.get('id')
-        token_type=payload.get('type')
-        if token_type!="access":
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get('sub')
+        user_id: int = payload.get('id')
+        token_type = payload.get('type')
+        if token_type != "access":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid access token")
         if username is None or user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-        return {'username': username, 'id':user_id}
+        return {'username': username, 'id': user_id}
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-        
- 
+
+
+def is_safe_redirect_url(url: str) -> bool:
+    if not url:
+        return False
+    frontend_base = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    if (url.startswith("http://localhost:") or
+        url.startswith("http://localhost/") or
+        url == "http://localhost" or
+        url.startswith("http://127.0.0.1:") or
+        url.startswith("http://127.0.0.1/") or
+        url == "http://127.0.0.1" or
+        url.startswith("https://localhost:") or
+        url.startswith("https://127.0.0.1:") or
+        url.startswith("obsidiantodo://") or
+        url.startswith(frontend_base)):
+        return True
+    return False
+
+
 @router.get("/google/login")
-async def  google_login(request: Request):
-    redirect_uri=request.url_for("google_callback")
+async def google_login(request: Request, redirect_url: str | None = None):
+    if redirect_url and is_safe_redirect_url(redirect_url):
+        request.session["post_login_redirect"] = redirect_url
+
+    redirect_uri = request.url_for("google_callback")
     print("Redirect URI:", redirect_uri)
     return await oauth.google.authorize_redirect(
         request,
         redirect_uri
     )
 
+
 @router.get("/google/callback")
-async def google_callback(requests: Request,response: Response,db: Session = Depends(database.get_db)):
-    token=await oauth.google.authorize_access_token(requests)
-    print(token)
-    user_info = token["userinfo"]
-    user=db.query(models.Users).filter(models.Users.google_id==user_info["sub"]).first()
+async def google_callback(requests: Request, db: Session = Depends(database.get_db)):
+    target_url = requests.session.pop("post_login_redirect", None) or os.getenv("FRONTEND_URL", "http://localhost:3000")
+    try:
+        token = await oauth.google.authorize_access_token(requests)
+    except Exception as e:
+        print("OAuth token error:", e)
+        sep = "&" if "?" in target_url else "?"
+        error_url = f"{target_url}{sep}error=auth_failed"
+        return RedirectResponse(url=error_url, status_code=status.HTTP_302_FOUND)
+
+    user_info = token.get("userinfo") if isinstance(token, dict) else None
+    if not user_info or "sub" not in user_info:
+        sep = "&" if "?" in target_url else "?"
+        return RedirectResponse(url=f"{target_url}{sep}error=invalid_userinfo", status_code=status.HTTP_302_FOUND)
+
+    user = db.query(models.Users).filter(models.Users.google_id == user_info["sub"]).first()
     if not user:
-        user=models.Users(
+        user = models.Users(
             google_id=user_info["sub"],
-            username=user_info["name"],
+            username=user_info.get("name", user_info.get("email", "User")),
             email=user_info["email"]
         )
         db.add(user)
         db.commit()
         db.refresh(user)
-    acc_token=access_token(
+
+    exp_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "20"))
+    exp_days = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+
+    acc_token = access_token(
         username=user.username,
         id=user.id,
-        expires_delta=timedelta(minutes=20)
+        expires_delta=timedelta(minutes=exp_minutes)
     )
-    refresh = create_refresh_token(username=user.username,id=user.id,expires_delta=timedelta(days=7))
-    response.set_cookie(
-    key="access_token",
-    value=acc_token,
-    httponly=True,
-    secure=True,
-    samesite="lax",
-    max_age=20 * 60
-             )
-    response.set_cookie(
-    key="refresh_token",
-    value=refresh,
-    httponly=True,
-    secure=True,
-    samesite="lax",
-    max_age=7 * 24 * 60 * 60
-         )
-    return {"Message":"Login Successful"}
+    refresh = create_refresh_token(
+        username=user.username,
+        id=user.id,
+        expires_delta=timedelta(days=exp_days)
+    )
 
-    
-       
+    secure, samesite = get_cookie_settings(requests)
 
-    
+    response = RedirectResponse(url=target_url, status_code=status.HTTP_302_FOUND)
+    response.set_cookie(
+        key="access_token",
+        value=acc_token,
+        httponly=True,
+        secure=secure,
+        samesite=samesite,
+        max_age=exp_minutes * 60
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh,
+        httponly=True,
+        secure=secure,
+        samesite=samesite,
+        max_age=exp_days * 24 * 60 * 60
+    )
+    return response
+
+
 @router.get("/me", response_model=schemas.UserPost)
-def get_login(current_user=Depends(get_current_user),db: Session = Depends(database.get_db)):
-    users=db.query(models.Users).filter(models.Users.id==current_user["id"]).first()
+def get_login(current_user=Depends(get_current_user), db: Session = Depends(database.get_db)):
+    users = db.query(models.Users).filter(models.Users.id == current_user["id"]).first()
     if not users:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=f"Not authorized")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authorized")
     return users
-    
 
 
 @router.post("/refresh")
 def refresh_token(request: Request, response: Response):
     refresh = request.cookies.get("refresh_token")
     if not refresh:
+        auth_hdr = request.headers.get("Authorization")
+        if auth_hdr and auth_hdr.startswith("Bearer "):
+            refresh = auth_hdr.split(" ", 1)[1]
+    if not refresh:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing refresh token")
-    
+
     try:
-        payload=jwt.decode(refresh,SECRET_KEY,algorithms=[ALGORITHM])
+        payload = jwt.decode(refresh, SECRET_KEY, algorithms=[ALGORITHM])
         username = payload.get("sub")
         user_id = payload.get("id")
         token_type = payload.get("type")
-        if token_type!="refresh":
+        if token_type != "refresh":
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
         if username is None or user_id is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-        new=access_token(username=username,id=user_id,expires_delta=timedelta(minutes=20))
+
+        exp_minutes = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "20"))
+        new = access_token(username=username, id=user_id, expires_delta=timedelta(minutes=exp_minutes))
+        secure, samesite = get_cookie_settings(request)
         response.set_cookie(
             key="access_token",
             value=new,
             httponly=True,
-            secure=True,
-            samesite="lax",
-            max_age=20 * 60
+            secure=secure,
+            samesite=samesite,
+            max_age=exp_minutes * 60
         )
         return {"message": "Access token refreshed successfully"}
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Could not validate user")
-    
-    
-    
+
+
 @router.post("/Logout")
-def logout(response: Response):
-    response.delete_cookie("access_token")
-    response.delete_cookie("refresh_token")
+def logout(request: Request, response: Response):
+    secure, samesite = get_cookie_settings(request)
+    response.delete_cookie("access_token", samesite=samesite, secure=secure)
+    response.delete_cookie("refresh_token", samesite=samesite, secure=secure)
     return {"message": "Logged out successfully"}
 
 
 @router.get("/health")
 def health():
     return {"message": "Health check"}
-
-
-
-            
-

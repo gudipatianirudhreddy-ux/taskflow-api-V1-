@@ -63,3 +63,61 @@ def test_auth_logout_clears_cookies(auth_client_user1):
     response = auth_client_user1.post("/auth/Logout")
     assert response.status_code == 200
     assert response.json()["message"] == "Logged out successfully"
+
+
+def test_bearer_token_fallback(client, user1, token_user1):
+    """Verifies that Authorization: Bearer token is supported as fallback for mobile/APIs."""
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {token_user1}"})
+    assert response.status_code == 200
+    assert response.json()["id"] == user1.id
+
+
+def test_cors_allows_arbitrary_localhost_with_credentials(client):
+    """Verifies that CORS allows arbitrary localhost ports with credentials mode enabled."""
+    response = client.get(
+        "/auth/health",
+        headers={"Origin": "http://localhost:54321"}
+    )
+    assert response.status_code == 200
+    assert response.headers.get("access-control-allow-origin") == "http://localhost:54321"
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
+from unittest.mock import patch
+
+def test_full_google_oauth_web_redirect_and_cookies(client, db):
+    """Verifies that google/callback redirects to target_url and sets HttpOnly cookies."""
+    # Step 1: user visits /auth/google/login?redirect_url=http://localhost:54321
+    login_resp = client.get("/auth/google/login?redirect_url=http://localhost:54321", follow_redirects=False)
+    assert login_resp.status_code == 302
+    assert "accounts.google.com" in login_resp.headers["location"]
+
+    # Step 2: Google redirects back to /auth/google/callback
+    with patch("app.Oauth.oauth.google.authorize_access_token") as mock_token:
+        mock_token.return_value = {
+            "userinfo": {
+                "sub": "gid_web_999",
+                "name": "Web User",
+                "email": "webuser@example.com"
+            }
+        }
+        cb_resp = client.get("/auth/google/callback", follow_redirects=False)
+        assert cb_resp.status_code == 302
+        assert cb_resp.headers["location"] == "http://localhost:54321"
+        assert "access_token" in cb_resp.cookies
+        assert "refresh_token" in cb_resp.cookies
+
+        # Step 3: client loads /auth/me with cookies
+        me_resp = client.get("/auth/me", cookies=cb_resp.cookies)
+        print("ME RESP JSON:", me_resp.json())
+        assert me_resp.status_code == 200
+        assert me_resp.json()["email"] == "webuser@example.com"
+
+        # Step 4: client refreshes token
+        ref_resp = client.post("/auth/refresh", cookies=cb_resp.cookies)
+        assert ref_resp.status_code == 200
+        assert "access_token" in ref_resp.cookies
+
+        # Step 5: client logs out
+        logout_resp = client.post("/auth/Logout", cookies=cb_resp.cookies)
+        assert logout_resp.status_code == 200
