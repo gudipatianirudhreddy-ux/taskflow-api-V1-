@@ -108,7 +108,7 @@ def delete_subtask(subtask_id: int,db: Session = Depends(database.get_db),curren
         models.subtasks.id == subtask_id,
         models.tasks.users_id == current_user["id"]
     )
-)
+    )
     if not sub.first():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Subtask not found or you do not have permission to delete subtask.")
     db.delete(sub.first())
