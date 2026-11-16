@@ -261,3 +261,42 @@ def test_joined_member_can_get_group_details(
     assert details.status_code == 200
     assert details.json()["id"] == group_id
     assert details.json()["name"] == "Member-visible group"
+
+
+def test_invitation_landing_page_does_not_accept_invitation(
+    auth_client_user1, auth_client_user2, user2, db
+):
+    group_res = auth_client_user1.post(
+        "/groups/", json={"name": "Landing test", "description": "Deep link"}
+    )
+    group_id = group_res.json()["id"]
+    invite_res = auth_client_user1.post(
+        f"/groups/{group_id}/invite", json={"email": user2.email}
+    )
+    token = invite_res.json()["token"]
+
+    landing = auth_client_user2.get(f"/groups/invitations/{token}/")
+    assert landing.status_code == 200
+    assert "obsidiantodo://invite/" + token in landing.text
+
+    # Visiting the email URL must not mutate membership or invitation status.
+    assert db.query(models.Members).filter(
+        models.Members.group_id == group_id, models.Members.user_id == user2.id
+    ).first() is None
+    invitation = db.query(models.GroupInvitation).filter_by(token=token).first()
+    assert invitation.status == models.InvitationStatus.pending
+
+
+def test_invitation_accept_requires_authentication(auth_client_user1, user2):
+    group_res = auth_client_user1.post(
+        "/groups/", json={"name": "Auth test", "description": "Protected accept"}
+    )
+    invite_res = auth_client_user1.post(
+        f"/groups/{group_res.json()['id']}/invite", json={"email": user2.email}
+    )
+    token = invite_res.json()["token"]
+    # The public landing page is accessible, but acceptance remains protected.
+    from app.main import app
+    from fastapi.testclient import TestClient
+    response = TestClient(app).post(f"/groups/invitations/{token}/accept")
+    assert response.status_code == 401
