@@ -45,7 +45,7 @@ def test_member_can_list_joined_group(
     assert invite_res.status_code == 201
 
     # User2 accepts the invitation
-    accept_res = auth_client_user2.get(
+    accept_res = auth_client_user2.post(
         f"/groups/invitations/{invite_res.json()['token']}/accept"
     )
     assert accept_res.status_code == 202
@@ -129,7 +129,7 @@ def test_group_invitation_flow(
     assert unauth_invite.status_code == 403
 
     # 4. User 2 accepts invitation
-    accept_res = auth_client_user2.get(
+    accept_res = auth_client_user2.post(
         f"/groups/invitations/{token}/accept"
     )
     assert accept_res.status_code == 202
@@ -165,7 +165,7 @@ def test_group_max_3_members_limit(
         json={"email": user2.email},
     )
     assert inv2.status_code == 201
-    auth_client_user2.get(
+    auth_client_user2.post(
         f"/groups/invitations/{inv2.json()['token']}/accept"
     )
 
@@ -175,7 +175,7 @@ def test_group_max_3_members_limit(
         json={"email": user3.email},
     )
     assert inv3.status_code == 201
-    auth_client_user3.get(
+    auth_client_user3.post(
         f"/groups/invitations/{inv3.json()['token']}/accept"
     )
 
@@ -214,7 +214,7 @@ def test_leave_group_and_remove_member(
         f"/groups/{group_id}/invite",
         json={"email": user2.email},
     )
-    auth_client_user2.get(
+    auth_client_user2.post(
         f"/groups/invitations/{inv.json()['token']}/accept"
     )
 
@@ -252,7 +252,7 @@ def test_joined_member_can_get_group_details(
     )
     assert invite_res.status_code == 201
 
-    accept_res = auth_client_user2.get(
+    accept_res = auth_client_user2.post(
         f"/groups/invitations/{invite_res.json()['token']}/accept"
     )
     assert accept_res.status_code == 202

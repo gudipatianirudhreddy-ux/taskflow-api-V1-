@@ -1,7 +1,22 @@
+import base64
+import logging
 import os
-import smtplib
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+from email.message import EmailMessage
+
+import googleapiclient.discovery
+from google.auth.transport.requests import Request
+from google.oauth2.credentials import Credentials
+
+logger = logging.getLogger(__name__)
+
+GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.send"]
+REQUIRED_ENV_VARS = (
+    "GMAIL_SENDER_EMAIL",
+    "GMAIL_CLIENT_ID",
+    "GMAIL_CLIENT_SECRET",
+    "GMAIL_REFRESH_TOKEN",
+)
+
 
 def send_group_invitation(
     to_email: str,
@@ -9,11 +24,26 @@ def send_group_invitation(
     group_name: str,
     accept_url: str
 ):
-    smtp_email = os.getenv("SMTP_EMAIL")
-    smtp_password = os.getenv("SMTP_PASSWORD")
+    sender_email = os.getenv("GMAIL_SENDER_EMAIL")
+    client_id = os.getenv("GMAIL_CLIENT_ID")
+    client_secret = os.getenv("GMAIL_CLIENT_SECRET")
+    refresh_token = os.getenv("GMAIL_REFRESH_TOKEN")
 
-    if not smtp_email or not smtp_password:
-        raise ValueError("SMTP_EMAIL and SMTP_PASSWORD environment variables must be set.")
+    missing = [
+        var_name
+        for var_name, val in [
+            ("GMAIL_SENDER_EMAIL", sender_email),
+            ("GMAIL_CLIENT_ID", client_id),
+            ("GMAIL_CLIENT_SECRET", client_secret),
+            ("GMAIL_REFRESH_TOKEN", refresh_token),
+        ]
+        if not val
+    ]
+
+    if missing:
+        raise ValueError(
+            f"Missing required Gmail API environment variable(s): {', '.join(missing)}"
+        )
 
     subject = f"You're invited to join {group_name}"
 
@@ -82,13 +112,56 @@ def send_group_invitation(
     </html>
     """
 
-    msg = MIMEMultipart("alternative")
+    plain_text = (
+        f"You're invited to join {group_name}\n\n"
+        f"{inviter_email} has invited you to collaborate in {group_name}.\n\n"
+        f"Click the link below to accept the invitation and join the group:\n"
+        f"{accept_url}\n\n"
+        f"Please note: This invitation link will expire in 7 days."
+    )
+
+    msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = smtp_email
+    msg["From"] = sender_email
     msg["To"] = to_email
+    msg.set_content(plain_text)
+    msg.add_alternative(html_content, subtype="html")
 
-    msg.attach(MIMEText(html_content, "html"))
+    encoded_message = base64.urlsafe_b64encode(msg.as_bytes()).decode("utf-8")
 
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(smtp_email, smtp_password)
-        server.sendmail(smtp_email, to_email, msg.as_string())
+    try:
+        creds = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=client_id,
+            client_secret=client_secret,
+            scopes=GMAIL_SCOPES,
+        )
+        creds.refresh(Request())
+
+        service = googleapiclient.discovery.build(
+            "gmail", "v1", credentials=creds, cache_discovery=False
+        )
+
+        response = (
+            service.users()
+            .messages()
+            .send(userId="me", body={"raw": encoded_message})
+            .execute()
+        )
+        logger.info(
+            "Successfully sent group invitation email to %s for group '%s'",
+            to_email,
+            group_name,
+        )
+        return response
+    except Exception as e:
+        logger.error(
+            "Failed to send group invitation email to %s for group '%s': %s",
+            to_email,
+            group_name,
+            str(e),
+        )
+        raise
+
