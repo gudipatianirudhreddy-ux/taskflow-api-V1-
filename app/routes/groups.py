@@ -6,6 +6,7 @@ from typing import List
 from ..auth import get_current_user
 import secrets
 from html import escape
+import os
 from datetime import timedelta, datetime,timezone
 from app.services.email_service import send_group_invitation
 from app.models import InvitationStatus,Role
