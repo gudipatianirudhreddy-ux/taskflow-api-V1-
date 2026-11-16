@@ -135,7 +135,7 @@ def invitation_landing(token: str, db: Session = Depends(database.get_db)):
             status_code=status.HTTP_410_GONE,
         )
 
-    deep_link = f"obsidiantodo://invite/{token}"
+    deep_link = f"multido://groups/invitations/{token}"
     safe_deep_link = escape(deep_link, quote=True)
     return HTMLResponse(f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -148,6 +148,7 @@ def invitation_landing(token: str, db: Session = Depends(database.get_db)):
 </body></html>""")
 
 @router.post("/invitations/{token}/accept", status_code=status.HTTP_202_ACCEPTED)
+@router.get("/invitations/{token}/accept", status_code=status.HTTP_202_ACCEPTED)
 def accept_invitation(token: str,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
     qr1=db.query(models.GroupInvitation).filter(models.GroupInvitation.token==token).first()
     if not qr1:

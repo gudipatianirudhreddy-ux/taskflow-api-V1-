@@ -277,7 +277,7 @@ def test_invitation_landing_page_does_not_accept_invitation(
 
     landing = auth_client_user2.get(f"/groups/invitations/{token}/")
     assert landing.status_code == 200
-    assert "obsidiantodo://invite/" + token in landing.text
+    assert "multido://groups/invitations/" + token in landing.text
 
     # Visiting the email URL must not mutate membership or invitation status.
     assert db.query(models.Members).filter(
