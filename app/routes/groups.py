@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException,status
+from fastapi.responses import HTMLResponse
 from .. import database,models,schemas
 from sqlalchemy.orm import Session
 from typing import List
 from ..auth import get_current_user
 import secrets
+from html import escape
 from datetime import timedelta, datetime,timezone
 from app.services.email_service import send_group_invitation
 from app.models import InvitationStatus,Role
@@ -95,7 +97,7 @@ def send_invite(invite: schemas.GroupInvitationBase,group_id: int,db: Session = 
     db.add(invite_obj)
     db.commit()
     db.refresh(invite_obj)
-    accept_url =f"https://taskflow-api-v1-225t.onrender.com/groups/invitations/{token}/accept"
+    accept_url = f"{os.getenv('INVITATION_LANDING_BASE_URL', 'https://taskflow-api-v1-225t.onrender.com/groups/invitations').rstrip('/')}/{token}"
     try:
         inviter=db.query(models.Users).filter(models.Users.id==current_user["id"]).first()
         send_group_invitation(
@@ -114,7 +116,37 @@ def send_invite(invite: schemas.GroupInvitationBase,group_id: int,db: Session = 
     return invite_obj
 
 
-@router.get("/invitations/{token}/accept", status_code=status.HTTP_202_ACCEPTED)
+
+@router.get("/invitations/{token}", response_class=HTMLResponse, include_in_schema=False)
+def invitation_landing(token: str, db: Session = Depends(database.get_db)):
+    """Public landing page: email scanners can open it without accepting the invite."""
+    invitation = db.query(models.GroupInvitation).filter(
+        models.GroupInvitation.token == token
+    ).first()
+    if not invitation:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+    expires_at = invitation.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if invitation.status != InvitationStatus.pending or expires_at < datetime.now(timezone.utc):
+        return HTMLResponse(
+            "<h2>This invitation is no longer available.</h2>",
+            status_code=status.HTTP_410_GONE,
+        )
+
+    deep_link = f"obsidiantodo://invite/{token}"
+    safe_deep_link = escape(deep_link, quote=True)
+    return HTMLResponse(f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MultiDo Pulse invitation</title></head>
+<body style="font-family:Arial,sans-serif;max-width:560px;margin:48px auto;padding:24px;text-align:center">
+<h2>You're invited to join a MultiDo Pulse project</h2>
+<p>Open the MultiDo Pulse app to review and accept this invitation.</p>
+<a href="{safe_deep_link}" style="display:inline-block;padding:14px 22px;background:#4f46e5;color:white;text-decoration:none;border-radius:8px">Open MultiDo Pulse</a>
+<p>If the app does not open, install or open MultiDo Pulse and use the invitation link again.</p>
+</body></html>""")
+
+@router.post("/invitations/{token}/accept", status_code=status.HTTP_202_ACCEPTED)
 def accept_invitation(token: str,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
     qr1=db.query(models.GroupInvitation).filter(models.GroupInvitation.token==token).first()
     if not qr1:
