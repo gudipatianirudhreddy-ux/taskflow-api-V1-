@@ -278,6 +278,21 @@ def test_invitation_landing_page_does_not_accept_invitation(
     landing = auth_client_user2.get(f"/groups/invitations/{token}/")
     assert landing.status_code == 200
     assert "multido://groups/invitations/" + token in landing.text
+    assert "/groups/invitations/" + token in landing.text
+
+    # Web browser gets /groups/invitations/{token}
+    web_landing = auth_client_user2.get(
+        f"/groups/invitations/{token}/",
+        headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"}
+    )
+    assert web_landing.status_code == 200
+    assert "/groups/invitations/" + token in web_landing.text
+
+    # Preview endpoint returns project metadata without accepting
+    preview = auth_client_user2.get(f"/groups/invitations/{token}/preview")
+    assert preview.status_code == 200
+    assert preview.json()["group_name"] == "Landing test"
+    assert preview.json()["group_id"] == group_id
 
     # Visiting the email URL must not mutate membership or invitation status.
     assert db.query(models.Members).filter(
