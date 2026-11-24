@@ -9,7 +9,7 @@ def group_with_members(auth_client_user1, auth_client_user2, user1, user2):
     group_id = group_res.json()["id"]
 
     inv = auth_client_user1.post(f"/groups/{group_id}/invite", json={"email": user2.email})
-    auth_client_user2.post(f"/groups/invitations/{inv.json()['token']}/accept")
+    auth_client_user2.patch(f"/groups/invitations/{inv.json()['id']}/respond", json={"status": "accepted"})
 
     return group_id
 
