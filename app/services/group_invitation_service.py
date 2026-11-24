@@ -7,6 +7,13 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 
 
+def _as_utc_aware(value: datetime) -> datetime:
+    """SQLite may return naive UTC datetimes despite timezone=True."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def in_group_invitation(
     db: Session,
     invitation_data: schemas.GroupInvitationCreate,
@@ -68,7 +75,7 @@ def in_group_invitation(
     )
 
     if existing_invitation:
-        if existing_invitation.expires_at <= now:
+        if _as_utc_aware(existing_invitation.expires_at) <= now:
             existing_invitation.status = models.InvitationStatus.expired
             db.flush()
         else:
@@ -138,7 +145,7 @@ def respond_to_invitation(db:Session,current_user_id: int,invitation_id: int, re
     now=datetime.now(timezone.utc)
     if invitation.status!=models.InvitationStatus.pending:
         raise HTTPException(status_code=409, detail="Invitation is no longer pending")
-    if invitation.expires_at<=now :
+    if _as_utc_aware(invitation.expires_at)<=now :
         invitation.status=models.InvitationStatus.expired
         db.commit()
         raise HTTPException(status_code=404, detail="Invitations is expired")

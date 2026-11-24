@@ -9,8 +9,12 @@ def group_with_members(auth_client_user1, auth_client_user2, user1, user2):
     group_id = group_res.json()["id"]
 
     inv = auth_client_user1.post(f"/groups/{group_id}/invite", json={"email": user2.email})
-    auth_client_user2.patch(f"/groups/invitations/{inv.json()['id']}/respond", json={"status": "accepted"})
-
+    assert inv.status_code == 201, inv.text
+    accepted = auth_client_user2.patch(
+        f"/groups/invitations/{inv.json()['id']}/respond",
+        json={"status": "accepted"},
+    )
+    assert accepted.status_code == 200, accepted.text
     return group_id
 
 
@@ -219,6 +223,7 @@ def test_admin_group_task_permissions(
         models.Members.group_id == group_id,
         models.Members.user_id == user2.id,
     ).first()
+    assert membership is not None, "Invitation acceptance should create membership"
     membership.role = models.Role.admin
     db.commit()
 
