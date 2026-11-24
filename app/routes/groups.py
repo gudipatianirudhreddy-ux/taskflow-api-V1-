@@ -18,14 +18,22 @@ router=APIRouter(
 
 @router.post('/',status_code=status.HTTP_201_CREATED,response_model=schemas.GroupPost)
 def create_group(posts: schemas.Group,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    added=models.Groups(**posts.dict(), owners_id=current_user["id"])
-    db.add(added)
-    db.commit()
-    db.refresh(added)
-    owner_member=models.Members(group_id=added.id,user_id=current_user["id"],role="owner")
-    db.add(owner_member)
-    db.commit()
-    return added
+    try:
+        added = models.Groups(**posts.model_dump(), owners_id=current_user["id"])
+        db.add(added)
+        db.flush()  # obtain group id without committing half-created state
+        owner_member = models.Members(
+            group_id=added.id,
+            user_id=current_user["id"],
+            role=Role.owner,
+        )
+        db.add(owner_member)
+        db.commit()
+        db.refresh(added)
+        return added
+    except Exception:
+        db.rollback()
+        raise
 
 @router.get('/',status_code=status.HTTP_200_OK, response_model=List[schemas.GroupPost])
 def get_groups(db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
@@ -234,38 +242,63 @@ def invitation_landing(token: str, request: Request, db: Session = Depends(datab
 
 @router.post("/invitations/{token}/accept", status_code=status.HTTP_202_ACCEPTED)
 @router.get("/invitations/{token}/accept", status_code=status.HTTP_202_ACCEPTED)
-def accept_invitation(token: str,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    qr1=db.query(models.GroupInvitation).filter(models.GroupInvitation.token==token).first()
-    if not qr1:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    if qr1.status != InvitationStatus.pending:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation is no longer pending.")
-    expires_at = qr1.expires_at
-    if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < datetime.now(timezone.utc):
-        qr1.status=InvitationStatus.expired
-        db.commit()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invitation has expired")
-    qr2=db.query(models.Users).filter(models.Users.id==current_user["id"]).first()
-    if qr2.email!=qr1.email:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN)
-    qr3=db.query(models.Members).filter(models.Members.group_id==qr1.group_id, models.Members.user_id==qr2.id).first()
-    if qr3:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User is already a member of this group.")
-    people=db.query(models.Members).filter(models.Members.group_id==qr1.group_id).count()
-    if people>=3:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only group of 3 people are only alowed")
-    new_member=models.Members(
-        group_id=qr1.group_id,
-        user_id=current_user["id"],
-        role=Role.member
+def accept_invitation(token: str, db: Session = Depends(database.get_db), current_user=Depends(get_current_user)):
+    # Determine group first, then lock group before locking/updating invitation.
+    invitation_ref = (
+        db.query(models.GroupInvitation)
+        .filter(models.GroupInvitation.token == token)
+        .first()
     )
-    db.add(new_member)
-    qr1.status=InvitationStatus.accepted
-    db.commit()
-    db.refresh(new_member)
-    return {"message":"Invitation accepted successfully."}
+    if not invitation_ref:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+
+    try:
+        group_invitation_service._lock_group(db, invitation_ref.group_id)
+        invitation = (
+            db.query(models.GroupInvitation)
+            .filter(models.GroupInvitation.token == token)
+            .with_for_update()
+            .first()
+        )
+        if not invitation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found")
+        if invitation.status != InvitationStatus.pending:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Invitation is no longer pending.",
+            )
+
+        expires_at = invitation.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at <= datetime.now(timezone.utc):
+            invitation.status = InvitationStatus.expired
+            db.commit()
+            raise HTTPException(
+                status_code=status.HTTP_410_GONE,
+                detail="Invitation has expired",
+            )
+
+        user = db.query(models.Users).filter(models.Users.id == current_user["id"]).first()
+        if not user or user.email.casefold() != invitation.email.casefold():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Invitation was sent to a different account",
+            )
+
+        # add_member applies the same group lock and checks capacity under it.
+        group_invitation_service.add_member(
+            db, current_user["id"], invitation.group_id
+        )
+        invitation.status = InvitationStatus.accepted
+        db.commit()
+        return {"message": "Invitation accepted successfully."}
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception:
+        db.rollback()
+        raise
 
 
 @router.get("/{group_id}/members", status_code=status.HTTP_200_OK, response_model=List[schemas.GroupMemberResponse])
