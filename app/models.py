@@ -4,12 +4,12 @@ from sqlalchemy.orm import relationship
 from . database import Base
 from sqlalchemy.sql import func
 # from sqlalchemy.ext.declarative import declarative_base
-
 import enum
 
 class InvitationStatus(str, enum.Enum):
     pending = "pending"
     accepted = "accepted"
+    rejected = "rejected"
     expired = "expired"
 
 class Role(str, enum.Enum):
@@ -166,4 +166,15 @@ class AIConversation(Base):
     updated_at=Column(DateTime(timezone=True),server_default=func.now(),onupdate=func.now())
     
 
+
+class InGroupInvitation(Base):
+    __tablename__ = "in_app_group_invitation"
+    id=Column(BigInteger, primary_key=True,nullable=False,autoincrement=True)
+    group_id=Column(BigInteger,ForeignKey("Group.id", ondelete='CASCADE'),nullable=False,index=True)
+    invited_user_id=Column(BigInteger, ForeignKey("users.id", ondelete='CASCADE'),nullable=False)
+    invited_by=Column(BigInteger, ForeignKey("users.id", ondelete='CASCADE'),nullable=False)
+    status=Column(Enum(InvitationStatus, name="in_app_invitation_status"),nullable=False,server_default="pending")
+    created_at=Column(DateTime(timezone=True),nullable=False,server_default=text('now()'))
+    responded_at=Column(DateTime(timezone=True),nullable=True)
+    expires_at=Column(DateTime(timezone=True),nullable=False)
 

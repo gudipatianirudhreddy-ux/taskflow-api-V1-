@@ -10,7 +10,7 @@ import os
 from datetime import timedelta, datetime,timezone
 from app.services.email_service import send_group_invitation
 from app.models import InvitationStatus,Role
-
+from app.services import group_invitation_service
 router=APIRouter(
     prefix='/groups',
     tags=['Groups']
@@ -64,60 +64,25 @@ def delete(group_id: int, db: Session = Depends(database.get_db),current_user= D
      db.commit()
      return {"Messsage":"Deleted the group Sucessfully"}
 
-@router.post("/{group_id}/invite", status_code=status.HTTP_201_CREATED,response_model=schemas.GroupInvitationResponse)
+@router.post("/{group_id}/invite", status_code=status.HTTP_201_CREATED,response_model=schemas.InGroupInvitationResponse)
 def send_invite(invite: schemas.GroupInvitationBase,group_id: int,db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
-    ans=db.query(models.Groups).filter(models.Groups.id==group_id).first()
-    if not ans:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Group dosen't exists")
-    if ans.owners_id!=current_user["id"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User not validate or nnot loggined")
-    user=db.query(models.Users).filter(models.Users.email==invite.email).first()
-    if not user:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User does not exists")
-    if user.id==current_user["id"]:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You  cannot invite yourself")
-    pending=db.query(models.GroupInvitation).filter( models.GroupInvitation.group_id==group_id, models.GroupInvitation.email==invite.email,models.GroupInvitation.status==InvitationStatus.pending
-                                                    ).first()
-    if pending:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Invitation already sent")
-    modes=(db.query(models.Members).filter(models.Members.group_id==group_id,models.Members.user_id==user.id).first())
-    if modes:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists in the group")
-    people=db.query(models.Members).filter(models.Members.group_id==group_id).count()
-    if people>=3:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Only group of 3 people are only alowed")
-    token=secrets.token_urlsafe(32)
-    expires_at=datetime.now(timezone.utc) + timedelta(days=7)
-    invite_obj=models.GroupInvitation(
-         group_id=group_id,
-         email=invite.email,
-         invited_by=current_user["id"],
-         token=token,
-        expires_at=expires_at
-    )
-    db.add(invite_obj)
-    db.commit()
-    db.refresh(invite_obj)
-    accept_url = f"{os.getenv('INVITATION_LANDING_BASE_URL', 'https://taskflow-api-v1-225t.onrender.com/groups/invitations').rstrip('/')}/{token}"
-    try:
-        inviter=db.query(models.Users).filter(models.Users.id==current_user["id"]).first()
-        send_group_invitation(
-            to_email=invite.email,
-             inviter_email=inviter.email,
-              group_name=ans.name,
-              accept_url=accept_url
-        )
-    except Exception as e:
-         db.delete(invite_obj)
-         db.commit()
-         raise  HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,detail=f"Failed to send invitation: {str(e)}")
-     
-         
-        
-    return invite_obj
+    invitation=group_invitation_service.in_group_invitation(db=db,invitation_data=invite,group_id=group_id,current_user_id=current_user["id"])
+    return invitation
+    
+@router.get("/invitations",response_model=list[schemas.InGroupInvitationResponse])
+def get_invitations(db: Session=Depends(database.get_db), current_user=Depends(get_current_user)):
+    invitations=group_invitation_service.user_invitation(db=db,current_user_id=current_user["id"])
+    return invitations
 
 
-
+@router.patch("/invitations/{invitation_id/respond}",response_model=schemas.InGroupInvitationResponse)
+def respond_to_invitation(invitation_id: int,response:schemas.GroupInvitationRespond ,db: Session=Depends(database.get_db),current_user= Depends(get_current_user)):
+    inv=group_invitation_service.respond_to_invitation(db=db,
+                                                        current_user_id=current_user["id"],
+                                                        invitation_id=invitation_id,
+                                                        response=response.status)
+    return inv
+    
 @router.get("/invitations/{token}/preview", status_code=status.HTTP_200_OK)
 def get_invitation_preview(token: str, db: Session = Depends(database.get_db)):
     """Public preview endpoint: returns group and inviter details for preview before accepting."""

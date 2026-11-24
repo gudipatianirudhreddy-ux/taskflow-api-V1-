@@ -4,7 +4,10 @@ from datetime import datetime
 from app.models import InvitationStatus, Role
 from app.models import Priority
 from app.date_utils import normalize_due_date_input, format_stored_due_date
+from typing import Literal
 
+class GroupInvitationRespond(BaseModel):
+    status: Literal["accepted", "rejected"]
 
 class DueDateInputModel(BaseModel):
     """Normalize incoming due dates to naive UTC for existing DB columns."""
@@ -232,3 +235,22 @@ class GroupSubtaskUpdate(DueDateInputModel):
     description: Optional[str] = None
     completed: Optional[bool] = None
     due_date: datetime| None=None
+
+
+class GroupInvitationCreate(BaseModel):
+     email: EmailStr
+
+class GroupInvitationRespond(BaseModel):
+    status: InvitationStatus
+
+class InGroupInvitationResponse(BaseModel):
+    id: int
+    group_id: int
+    invited_user_id: int
+    invited_by: int
+    status: InvitationStatus
+    created_at: datetime
+    responded_at: datetime | None
+    expires_at: datetime
+    class Config:
+        from_attributes = True
