@@ -79,7 +79,7 @@ def in_group_invitation(
     members_count=(db.query(models.Members).filter(models.Members.group_id==group_id).count())
     pending_count=(db.query(models.InGroupInvitation).filter(models.InGroupInvitation.group_id==group_id,
                                                              models.InGroupInvitation.status==models.InvitationStatus.pending,
-                                                             models.InGroupInvitation.expires_at>datetime.now()).count())
+                                                             models.InGroupInvitation.expires_at>now).count())
     if members_count+pending_count>=3:
         raise HTTPException(status_code=400, detail="Group has reached maximum capacity")
     
@@ -131,7 +131,7 @@ def respond_to_invitation(db:Session,current_user_id: int,invitation_id: int, re
     group= _lock_group_for_capacity(db, group_id)
     if not group:
         raise HTTPException(status_code=404,detail="Group not found")
-    db.query(models.InGroupInvitation).filter(models.InGroupInvitation.id==invitation_id,models.InGroupInvitation.invited_user_id==current_user_id).with_for_update().first()
+    db.query(models.InGroupInvitation).filter(models.InGroupInvitation.id==invitation_id,models.InGroupInvitation.invited_user_id==current_user_id).with_for_update().populate_existing().first()
     if not invitation:
             raise HTTPException(status_code=404, detail="Invitation not found")
     now=datetime.now(timezone.utc)
@@ -139,6 +139,7 @@ def respond_to_invitation(db:Session,current_user_id: int,invitation_id: int, re
         raise HTTPException(status_code=409, detail="Invitation is no longer pending")
     if invitation.expires_at<=now :
         invitation.status=models.InvitationStatus.expired
+        db.commit()
         raise HTTPException(status_code=404, detail="Invitations is expired")
     if response==models.InvitationStatus.accepted:
         add_member(db,current_user_id,invitation.group_id)
