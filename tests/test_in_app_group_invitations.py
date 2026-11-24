@@ -43,11 +43,13 @@ def _make_user(db, number):
 
 
 def _send(db, group, owner, invited):
+    group_id = group.id if isinstance(group, models.Groups) else group
+    owner_id = owner.id if isinstance(owner, models.Users) else owner
     return invitations.in_group_invitation(
         db,
         schemas.GroupInvitationCreate(email=invited.email),
-        group.id,
-        owner.id,
+        group_id,
+        owner_id,
     )
 
 
@@ -148,7 +150,6 @@ def test_rejection_releases_invitation_reservation(db, user1):
     ) == 0
 
 
-@pytest.mark.postgres_only
 def test_concurrent_invites_cannot_overbook_group(db, user1):
     """PostgreSQL integration regression: only two reservations fit with owner."""
     if db.bind.dialect.name != "postgresql":
@@ -157,7 +158,10 @@ def test_concurrent_invites_cannot_overbook_group(db, user1):
     from tests.conftest import TestingSessionLocal
 
     group = _make_group(db, user1)
+    group_id = group.id
+    owner_id = user1.id
     invitees = [_make_user(db, n) for n in range(40, 43)]
+    invitee_ids = [user.id for user in invitees]
     start = Barrier(len(invitees))
 
     def attempt(user_id):
@@ -166,7 +170,7 @@ def test_concurrent_invites_cannot_overbook_group(db, user1):
             user = session.query(models.Users).filter_by(id=user_id).one()
             start.wait(timeout=10)
             try:
-                _send(session, group, user1, user)
+                _send(session, group_id, owner_id, user)
                 return "created"
             except HTTPException as exc:
                 assert exc.status_code == 400
@@ -175,7 +179,7 @@ def test_concurrent_invites_cannot_overbook_group(db, user1):
             session.close()
 
     with ThreadPoolExecutor(max_workers=3) as pool:
-        outcomes = list(pool.map(attempt, [u.id for u in invitees]))
+        outcomes = list(pool.map(attempt, invitee_ids))
 
     assert outcomes.count("created") == 2
     assert outcomes.count("capacity") == 1
