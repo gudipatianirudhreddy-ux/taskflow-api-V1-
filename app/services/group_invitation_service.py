@@ -131,7 +131,8 @@ def respond_to_invitation(db:Session,current_user_id: int,invitation_id: int, re
     group= _lock_group_for_capacity(db, group_id)
     if not group:
         raise HTTPException(status_code=404,detail="Group not found")
-    db.query(models.InGroupInvitation).filter(models.InGroupInvitation.id==invitation_id,models.InGroupInvitation.invited_user_id==current_user_id).with_for_update().populate_existing().first()
+    invitation=db.query(models.InGroupInvitation).filter(models.InGroupInvitation.id==invitation_id,
+                                              models.InGroupInvitation.invited_user_id==current_user_id).with_for_update().populate_existing().first()
     if not invitation:
             raise HTTPException(status_code=404, detail="Invitation not found")
     now=datetime.now(timezone.utc)
