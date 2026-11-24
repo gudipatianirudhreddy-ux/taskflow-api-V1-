@@ -138,8 +138,8 @@ def test_group_max_3_members_limit(
         f"/groups/{group_id}/invite",
         json={"email": user4.email},
     )
-    assert inv4.status_code == 409
-    assert "Only group of 3 people are only alowed" in inv4.json()["detail"]
+    assert inv4.status_code == 400
+    assert "Group has reached maximum capacity" in inv4.json()["detail"]
 
 
 def test_leave_group_and_remove_member(
