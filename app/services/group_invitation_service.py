@@ -15,11 +15,7 @@ def in_group_invitation(
 ):
     now = datetime.now(timezone.utc)
 
-    group = (
-        db.query(models.Groups)
-        .filter(models.Groups.id == group_id)
-        .first()
-    )
+    group = _lock_group_for_capacity(db, group_id)
 
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -108,7 +104,7 @@ def user_invitation( db: Session, current_user_id: int):
     return invitations
 
 def add_member(db: Session, current_user_id: int,group_id: int):
-    group=db.query(models.Groups).filter(models.Groups.id==group_id).first()
+    group= _lock_group_for_capacity(db, group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     existing_member=db.query(models.Members).filter(models.Members.group_id==group_id,models.Members.user_id==current_user_id).first()
@@ -131,6 +127,13 @@ def respond_to_invitation(db:Session,current_user_id: int,invitation_id: int, re
     invitation=db.query(models.InGroupInvitation).filter(models.InGroupInvitation.id==invitation_id,models.InGroupInvitation.invited_user_id==current_user_id).first()
     if not invitation:
         raise HTTPException(status_code=404, detail="Invitation not found")
+    group_id = invitation.group_id
+    group= _lock_group_for_capacity(db, group_id)
+    if not group:
+        raise HTTPException(status_code=404,detail="Group not found")
+    db.query(models.InGroupInvitation).filter(models.InGroupInvitation.id==invitation_id,models.InGroupInvitation.invited_user_id==current_user_id).with_for_update().first()
+    if not invitation:
+            raise HTTPException(status_code=404, detail="Invitation not found")
     now=datetime.now(timezone.utc)
     if invitation.status!=models.InvitationStatus.pending:
         raise HTTPException(status_code=409, detail="Invitation is no longer pending")
@@ -149,6 +152,13 @@ def respond_to_invitation(db:Session,current_user_id: int,invitation_id: int, re
     db.refresh(invitation)
     return invitation
 
+def _lock_group_for_capacity(db: Session, group_id: int):
+    return (
+        db.query(models.Groups)
+        .filter(models.Groups.id == group_id)
+        .with_for_update()
+        .first()
+    )
 
 
     
