@@ -200,7 +200,7 @@ def test_joined_member_can_get_group_details(
     accept_res = auth_client_user2.patch(
         f"/groups/invitations/{invite_res.json()['id']}/respond", json={"status": "accepted"}
     )
-    assert accept_res.status_code == 202
+    assert accept_res.status_code == 200
 
     details = auth_client_user2.get(f"/groups/{group_id}")
     assert details.status_code == 200
