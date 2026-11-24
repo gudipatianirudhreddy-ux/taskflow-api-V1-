@@ -29,7 +29,7 @@ def test_create_group_task_and_permissions(auth_client_user1, auth_client_user2,
         "assigned_to": user2.id
     })
     assert member_create.status_code == 403
-    assert member_create.json()["detail"] == "Member does not belong to this group"
+    assert member_create.json()["detail"] == "Only the group owner or admin can create tasks."
     # 2. Owner assigns to non-member user3 -> 400
     invalid_assign = auth_client_user1.post(f"/groups/{group_id}/tasks", json={
         "title": "Task 1",
@@ -145,7 +145,7 @@ def test_get_single_group_task_authorization(auth_client_user1, auth_client_user
     # 2. Member who is not assigned cannot view -> 403
     unassigned_res = auth_client_user2.get(f"/groups/{group_id}/tasks/{task_id}")
     assert unassigned_res.status_code == 403
-    assert unassigned_res.json()["detail"] == "You are not a member of this group"
+    assert unassigned_res.json()["detail"] == "You are not authorized to view this task"
 
     # 3. Non-member cannot view -> 403
     outsider_res = auth_client_user3.get(f"/groups/{group_id}/tasks/{task_id}")
