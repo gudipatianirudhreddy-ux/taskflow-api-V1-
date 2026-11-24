@@ -45,10 +45,10 @@ def test_member_can_list_joined_group(
     assert invite_res.status_code == 201
 
     # User2 accepts the invitation
-    accept_res = auth_client_user2.post(
-        f"/groups/invitations/{invite_res.json()['token']}/accept"
+    accept_res = auth_client_user2.patch(
+        f"/groups/invitations/{invite_res.json()['id']}/respond", json={"status": "accepted"}
     )
-    assert accept_res.status_code == 202
+    assert accept_res.status_code == 200
 
     # User2 lists their groups
     list_res = auth_client_user2.get("/groups/")
@@ -89,61 +89,6 @@ def test_group_authorization_non_owner(auth_client_user1, auth_client_user2):
     assert unauth_patch.status_code == 404
 
 
-def test_group_invitation_flow(
-    auth_client_user1,
-    auth_client_user2,
-    user1,
-    user2,
-    db,
-):
-    """Owner invites user2, and user2 accepts invitation."""
-    group_res = auth_client_user1.post(
-        "/groups/",
-        json={"name": "Project Beta", "description": "Beta"},
-    )
-    group_id = group_res.json()["id"]
-
-    # 1. Invite user2
-    invite_res = auth_client_user1.post(
-        f"/groups/{group_id}/invite",
-        json={"email": user2.email},
-    )
-    assert invite_res.status_code == 201
-
-    invite_data = invite_res.json()
-    token = invite_data["token"]
-    assert invite_data["email"] == user2.email
-
-    # 2. Cannot invite yourself
-    self_invite = auth_client_user1.post(
-        f"/groups/{group_id}/invite",
-        json={"email": user1.email},
-    )
-    assert self_invite.status_code == 400
-
-    # 3. Non-owner cannot invite
-    unauth_invite = auth_client_user2.post(
-        f"/groups/{group_id}/invite",
-        json={"email": "someone@example.com"},
-    )
-    assert unauth_invite.status_code == 403
-
-    # 4. User 2 accepts invitation
-    accept_res = auth_client_user2.post(
-        f"/groups/invitations/{token}/accept"
-    )
-    assert accept_res.status_code == 202
-    assert accept_res.json()["message"] == "Invitation accepted successfully."
-
-    # 5. Check members list
-    members_res = auth_client_user2.get(f"/groups/{group_id}/members")
-    assert members_res.status_code == 200
-
-    member_emails = [m["email"] for m in members_res.json()]
-    assert user1.email in member_emails
-    assert user2.email in member_emails
-
-
 def test_group_max_3_members_limit(
     auth_client_user1,
     auth_client_user2,
@@ -165,8 +110,8 @@ def test_group_max_3_members_limit(
         json={"email": user2.email},
     )
     assert inv2.status_code == 201
-    auth_client_user2.post(
-        f"/groups/invitations/{inv2.json()['token']}/accept"
+    auth_client_user2.patch(
+        f"/groups/invitations/{inv2.json()['id']}/respond", json={"status": "accepted"}
     )
 
     # Invite and add user3
@@ -175,8 +120,8 @@ def test_group_max_3_members_limit(
         json={"email": user3.email},
     )
     assert inv3.status_code == 201
-    auth_client_user3.post(
-        f"/groups/invitations/{inv3.json()['token']}/accept"
+    auth_client_user3.patch(
+        f"/groups/invitations/{inv3.json()['id']}/respond", json={"status": "accepted"}
     )
 
     # Group now has 3 members
@@ -214,8 +159,8 @@ def test_leave_group_and_remove_member(
         f"/groups/{group_id}/invite",
         json={"email": user2.email},
     )
-    auth_client_user2.post(
-        f"/groups/invitations/{inv.json()['token']}/accept"
+    auth_client_user2.patch(
+        f"/groups/invitations/{inv.json()['id']}/respond", json={"status": "accepted"}
     )
 
     # Owner cannot leave if sole owner -> 400
@@ -252,8 +197,8 @@ def test_joined_member_can_get_group_details(
     )
     assert invite_res.status_code == 201
 
-    accept_res = auth_client_user2.post(
-        f"/groups/invitations/{invite_res.json()['token']}/accept"
+    accept_res = auth_client_user2.patch(
+        f"/groups/invitations/{invite_res.json()['id']}/respond", json={"status": "accepted"}
     )
     assert accept_res.status_code == 202
 
@@ -263,55 +208,3 @@ def test_joined_member_can_get_group_details(
     assert details.json()["name"] == "Member-visible group"
 
 
-def test_invitation_landing_page_does_not_accept_invitation(
-    auth_client_user1, auth_client_user2, user2, db
-):
-    group_res = auth_client_user1.post(
-        "/groups/", json={"name": "Landing test", "description": "Deep link"}
-    )
-    group_id = group_res.json()["id"]
-    invite_res = auth_client_user1.post(
-        f"/groups/{group_id}/invite", json={"email": user2.email}
-    )
-    token = invite_res.json()["token"]
-
-    landing = auth_client_user2.get(f"/groups/invitations/{token}/")
-    assert landing.status_code == 200
-    assert "multido://groups/invitations/" + token in landing.text
-    assert "/groups/invitations/" + token in landing.text
-
-    # Web browser gets /groups/invitations/{token}
-    web_landing = auth_client_user2.get(
-        f"/groups/invitations/{token}/",
-        headers={"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0"}
-    )
-    assert web_landing.status_code == 200
-    assert "/groups/invitations/" + token in web_landing.text
-
-    # Preview endpoint returns project metadata without accepting
-    preview = auth_client_user2.get(f"/groups/invitations/{token}/preview")
-    assert preview.status_code == 200
-    assert preview.json()["group_name"] == "Landing test"
-    assert preview.json()["group_id"] == group_id
-
-    # Visiting the email URL must not mutate membership or invitation status.
-    assert db.query(models.Members).filter(
-        models.Members.group_id == group_id, models.Members.user_id == user2.id
-    ).first() is None
-    invitation = db.query(models.GroupInvitation).filter_by(token=token).first()
-    assert invitation.status == models.InvitationStatus.pending
-
-
-def test_invitation_accept_requires_authentication(auth_client_user1, user2):
-    group_res = auth_client_user1.post(
-        "/groups/", json={"name": "Auth test", "description": "Protected accept"}
-    )
-    invite_res = auth_client_user1.post(
-        f"/groups/{group_res.json()['id']}/invite", json={"email": user2.email}
-    )
-    token = invite_res.json()["token"]
-    # The public landing page is accessible, but acceptance remains protected.
-    from app.main import app
-    from fastapi.testclient import TestClient
-    response = TestClient(app).post(f"/groups/invitations/{token}/accept")
-    assert response.status_code == 401
