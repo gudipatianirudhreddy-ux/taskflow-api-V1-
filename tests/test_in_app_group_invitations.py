@@ -1,7 +1,5 @@
 """Regression tests for the registered-user, in-app group invitation flow."""
 
-from datetime import datetime, timedelta, timezone
-
 from app import models
 
 
