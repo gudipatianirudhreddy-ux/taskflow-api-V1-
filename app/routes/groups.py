@@ -33,6 +33,11 @@ def get_groups(db: Session = Depends(database.get_db),current_user= Depends(get_
 
     return getting
 
+@router.get("/invitations",response_model=list[schemas.InGroupInvitationResponse])
+def get_invitations(db: Session=Depends(database.get_db), current_user=Depends(get_current_user)):
+    invitations=group_invitation_service.user_invitation(db=db,current_user_id=current_user["id"])
+    return invitations
+
 @router.get("/{group_id}",status_code=status.HTTP_200_OK, response_model=schemas.GroupPost)
 def getting_post(group_id: int, db: Session = Depends(database.get_db),current_user= Depends(get_current_user)):
     post=db.query(models.Groups).join(models.Members,models.Groups.id==models.Members.group_id).filter(models.Members.user_id==current_user["id"],models.Groups.id==group_id).first()
@@ -69,13 +74,7 @@ def send_invite(invite: schemas.GroupInvitationBase,group_id: int,db: Session = 
     invitation=group_invitation_service.in_group_invitation(db=db,invitation_data=invite,group_id=group_id,current_user_id=current_user["id"])
     return invitation
     
-@router.get("/invitations",response_model=list[schemas.InGroupInvitationResponse])
-def get_invitations(db: Session=Depends(database.get_db), current_user=Depends(get_current_user)):
-    invitations=group_invitation_service.user_invitation(db=db,current_user_id=current_user["id"])
-    return invitations
-
-
-@router.patch("/invitations/{invitation_id/respond}",response_model=schemas.InGroupInvitationResponse)
+@router.patch("/invitations/{invitation_id}/respond",response_model=schemas.InGroupInvitationResponse)
 def respond_to_invitation(invitation_id: int,response:schemas.GroupInvitationRespond ,db: Session=Depends(database.get_db),current_user= Depends(get_current_user)):
     inv=group_invitation_service.respond_to_invitation(db=db,
                                                         current_user_id=current_user["id"],
