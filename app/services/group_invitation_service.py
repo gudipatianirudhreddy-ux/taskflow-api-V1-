@@ -132,7 +132,7 @@ def user_invitation(db: Session, current_user_id: int):
     return invitations
 
 
-def add_member(db: Session, current_user_id: int, group_id: int):
+def add_member(\n    db: Session,\n    current_user_id: int,\n    group_id: int,\n    exclude_invitation_id: int | None = None,\n):
     # This function also locks the group so other membership-adding paths
     # participate in the same capacity serialization.
     _lock_group(db, group_id)
@@ -148,12 +148,26 @@ def add_member(db: Session, current_user_id: int, group_id: int):
     if existing_member:
         raise HTTPException(status_code=409, detail="Already a member")
 
+    now = datetime.now(timezone.utc)
     members_count = (
         db.query(models.Members)
         .filter(models.Members.group_id == group_id)
         .count()
     )
-    if members_count >= 3:
+    pending_query = db.query(models.InGroupInvitation).filter(
+        models.InGroupInvitation.group_id == group_id,
+        models.InGroupInvitation.status == models.InvitationStatus.pending,
+        models.InGroupInvitation.expires_at > now,
+    )
+    if exclude_invitation_id is not None:
+        pending_query = pending_query.filter(
+            models.InGroupInvitation.id != exclude_invitation_id
+        )
+    pending_count = pending_query.count()
+
+    # Active invitations reserve capacity. Exclude the invitation being
+    # accepted because it is transitioning from pending to membership.
+    if members_count + pending_count >= 3:
         raise HTTPException(
             status_code=400,
             detail="Group has reached maximum capacity",
@@ -216,7 +230,7 @@ def respond_to_invitation(
             raise HTTPException(status_code=410, detail="Invitation has expired")
 
         if response == models.InvitationStatus.accepted:
-            add_member(db, current_user_id, invitation.group_id)
+            add_member(\n                db, current_user_id, invitation.group_id,\n                exclude_invitation_id=invitation.id,\n            )
         elif response != models.InvitationStatus.rejected:
             raise HTTPException(status_code=400, detail="Invalid invitation response")
 
