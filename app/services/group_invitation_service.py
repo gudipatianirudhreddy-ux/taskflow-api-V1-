@@ -6,6 +6,13 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 
 
+def _utc(value: datetime) -> datetime:
+    """Treat timezone-naive database timestamps as UTC (SQLite parity)."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _lock_group(db: Session, group_id: int):
     """Serialize capacity-changing operations for a group."""
     group = (
@@ -73,7 +80,7 @@ def in_group_invitation(
             .first()
         )
         if existing_invitation:
-            if existing_invitation.expires_at <= now:
+            if _utc(existing_invitation.expires_at) <= now:
                 existing_invitation.status = models.InvitationStatus.expired
                 db.flush()
             else:
@@ -223,7 +230,7 @@ def respond_to_invitation(
                 detail="Invitation is no longer pending",
             )
 
-        if invitation.expires_at <= now:
+        if _utc(invitation.expires_at) <= now:
             invitation.status = models.InvitationStatus.expired
             invitation.responded_at = now
             db.commit()  # persist expiry before returning the HTTP error
