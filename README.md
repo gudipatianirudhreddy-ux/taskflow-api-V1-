@@ -37,12 +37,46 @@ The project also practices production-oriented backend patterns such as relation
 - Delete groups as the owner
 - Owner is automatically added as a group member
 
-### Member & Invitation Management
-- Invite users by email
-- Accept invitations using secure tokens
-- View group members and roles
-- Remove members
-- Leave a group
+## 📩 In-App Group Invitations
+
+MultiDo Pulse provides an in-app invitation system that allows group owners to invite registered users to collaborate within their groups.
+
+### Features
+
+- Invite registered users to a group using their email address.
+- View received group invitations directly within the application.
+- Accept or reject pending invitations.
+- Automatically add users to the group when an invitation is accepted.
+- Prevent duplicate invitations and existing group memberships.
+- Validate group ownership and membership permissions.
+- Handle invitation expiration.
+- Enforce group capacity limits.
+
+### Invitation Workflow
+
+1. The group owner sends an invitation to a registered user.
+2. The backend validates the user, group ownership, and invitation status.
+3. The invitation is stored in the database with a `pending` status.
+4. The invited user retrieves their invitations through the application.
+5. The user accepts or rejects the invitation.
+6. Upon acceptance, the user is added to the group and the invitation status is updated.
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/groups/{group_id}/invite` | Send a group invitation |
+| `GET` | `/groups/invitations` | Retrieve received invitations |
+| `PATCH` | `/groups/invitations/{invitation_id}/respond` | Accept or reject an invitation |
+
+### Invitation Status
+
+- `pending` — Invitation is awaiting a response.
+- `accepted` — Invitation has been accepted.
+- `rejected` — Invitation has been rejected.
+- `expired` — Invitation has expired.
+
+**Note:** Invitations are managed entirely within the application. The recipient must have a registered account to receive and respond to an invitation.
 
 ### Group Task Management
 - Create tasks for group members
@@ -195,12 +229,7 @@ app/
 | PATCH | `/groups/{group_id}` |
 | DELETE | `/groups/{group_id}` |
 
-### Invitations
 
-| Method | Endpoint |
-|--------|----------|
-| POST | `/groups/{group_id}/invite` |
-| GET | `/groups/invitations/{token}/accept` |
 
 ### Members
 
