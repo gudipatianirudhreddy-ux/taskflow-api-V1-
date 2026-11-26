@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import timedelta, datetime,timezone
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
@@ -14,7 +14,10 @@ from . import schemas, database, models
 from app.Oauth import oauth
 import os
 import asyncio
-
+import secrets
+import hashlib
+from sqlalchemy import delete
+from .schemas import NativeExchangeRequest
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = os.getenv("ALGORITHM")
 
@@ -229,3 +232,87 @@ def logout(request: Request, response: Response):
 @router.get("/health")
 def health():
     return {"message": "Health check"}
+
+
+@router.get("/google/native/login", name="google_native_login")
+async def google_native_login(request: Request):
+    callback_url=request.url_for("google_native_callback")
+    return await oauth.google.authorize_redirect(request, callback_url)
+
+
+@router.get("/google/native/callback",name="google_native_callback")
+async def google_native_callback(request: Request, db: Session=Depends(database.get_db)):
+    native_redirect_url=os.getenv("NATIVE_REDIRECT_URL")
+    if not native_redirect_url:
+        raise HTTPException(status_code=500, detail="Native redirect url is not configured")
+    try:
+        token=await oauth.google.authorize_access_token(request)
+        userinfo=token.get("userinfo")
+        if not userinfo or not userinfo.get("sub"):
+            return RedirectResponse(f"{native_redirect_url}? error=invalid_google_user")
+    except Exception:
+        return RedirectResponse(f"{native_redirect_url}? error=google_auth_failed")
+    google_id=userinfo["sub"]
+    user=(db.query(models.Users).filter(models.Users.google_id==google_id).first())
+    if not user:
+        user=models.Users(google_id=google_id,
+                          username=(userinfo.get("name") or
+                                    userinfo.get("email") or
+                                    "User"),
+                                    email=userinfo.get("email"))
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    raw_code=secrets.token_urlsafe(32)
+    code_hash=hashlib.sha256(raw_code.encode()).hexdigest()
+    login_code=models.NativeLoginCode(
+        user_id=user.id,
+        code_hash=code_hash,
+        expires_at=datetime.now(timezone.utc)+timedelta(seconds=100)
+    )
+    db.add(login_code)
+    db.commit()
+    return RedirectResponse(f"{native_redirect_url}? code={raw_code}",status_code=302)
+
+
+@router.post("/google.native/exhange")
+def exhange_native_login_code(payload: NativeExchangeRequest,db: Session=Depends(database.get_db)):
+    code_hash=hashlib.sha256(payload.code.encode()).hexdigest()
+    statement=(delete(models.NativeLoginCode).where(models.NativeLoginCode.code_hash==code_hash,models.NativeLoginCode.expires_at> datetime.now(timezone.utc)).returning(models.NativeLoginCode.user_id))
+    result=db.execute(statement)
+    user_id=result.scalar_one_or_none()
+    db.commit()
+    if user_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired login code",
+        )
+    user=(db.query(models.Users).filter(models.Users.id==user_id).first())
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found",
+        )
+    exp_minutes=int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES","20"))
+    exp_days=int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS","7"))
+    access=access_token(
+        username=user.username,
+        id=user.id,
+        expires_delta=timedelta(minutes=exp_minutes)
+    )
+    refresh=create_refresh_token(
+        username=user.username,
+        id=user.id,
+        expires_delta=timedelta(days=exp_days)
+    )
+    return {
+        "access_token":access,
+        "refresh_token":refresh,
+        "token_type":"bearer"
+    }
+
+
+
+
+
+    

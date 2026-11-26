@@ -178,3 +178,13 @@ class InGroupInvitation(Base):
     responded_at=Column(DateTime(timezone=True),nullable=True)
     expires_at=Column(DateTime(timezone=True),nullable=False)
 
+
+class NativeLoginCode(Base):
+    __tablename__="native_login_codes"
+    id=Column(BigInteger, primary_key=True, nullable=False)
+    user_id=Column(BigInteger,ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    code_hash=Column(String, nullable=False, unique=True, index=True)
+    expires_at=Column(DateTime(timezone=True), nullable=False)
+    created_at=Column(DateTime(timezone=True),server_default=text("now()"), nullable=False)
+
+

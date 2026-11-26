@@ -254,3 +254,6 @@ class InGroupInvitationResponse(BaseModel):
     expires_at: datetime
     class Config:
         from_attributes = True
+
+class NativeExchangeRequest(BaseModel):
+    code: str

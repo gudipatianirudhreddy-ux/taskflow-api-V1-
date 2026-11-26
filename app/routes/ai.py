@@ -14,6 +14,10 @@ from app.services.group_ai_service import get_graph
 from app.services.due_date_response import answer_due_date_question
 from langchain_core.messages import HumanMessage,SystemMessage,AIMessage
 from langgraph.types import Command
+import time
+import logging
+logging.basicConfig(level=logging.INFO)
+logger=logging.getLogger(__name__)
 router=APIRouter(
     prefix='/ai',
     tags=['Ai_Features']
@@ -26,11 +30,18 @@ def get_all_tasks( request: schemas.AIChatRequest,db: Session = Depends(database
     #     db=db,
     #     user_id=current_user["id"]
     #     )
+    request_start=time.perf_counter()
+    logger.info("AI CHAT REQUEST STARTED")
     thread_id = request.thread_id
+    db_start=time.perf_counter()
     con=db.query(models.AIConversation).filter(models.AIConversation.thread_id==thread_id,models.AIConversation.user_id==current_user["id"]).first()
+    logger.info("CONVERSATION LOOP:  %.2f seconds",
+                time.perf_counter()-db_start)
     if not con:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,detail="Conversation not found")
+    graph_start=time.perf_counter()
     graph=get_graph(db,current_user["id"])
+    logger.info("GRAPH INITIALIZATION: %.2f seconds",time.perf_counter()-graph_start)
     config = {
     "configurable": {
         "thread_id": thread_id
@@ -71,11 +82,12 @@ def get_all_tasks( request: schemas.AIChatRequest,db: Session = Depends(database
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="A message is required for a normal chat request.",
             )
-
+        agent_start = time.perf_counter()
         result = graph.invoke(
             {"messages": [HumanMessage(content=request.message)]},
             config=config,
         )
+        logger.info("LANGGRAPH EXCECUTION: %.2f seconds", time.perf_counter()-agent_start)
 
     # 4. If the graph paused, return the approval details.
     pending = result.get("__interrupt__", [])

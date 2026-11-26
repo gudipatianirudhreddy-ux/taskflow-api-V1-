@@ -19,6 +19,10 @@ from langgraph.prebuilt import ToolNode,tools_condition
 from langgraph.graph import START
 from app.services.checkpoint import checkpointer
 from langchain_core.messages import HumanMessage,SystemMessage,AIMessage
+import time
+import logging
+logging.basicConfig(level=logging.INFO)
+logger=logging.getLogger(__name__)
 
 
 SYSTEM_PROMPT = """
@@ -986,7 +990,9 @@ def get_graph(db: Session, user_id: int):
             SystemMessage(content=SYSTEM_PROMPT),
             *state["messages"]
         ]
+        llm_start=time.perf_counter()
         response = llm_with_tools.invoke(messages)
+        logger.info("GROUP AGENT LLM CALL %.2f seconds",time.perf_counter()-llm_start)
         return {"messages": [response]}
 
     graph_builder = StateGraph(State)
